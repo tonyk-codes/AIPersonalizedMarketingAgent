@@ -1,4 +1,4 @@
-"""Streamlit front-end for the AI Script-to-Screen pipeline.
+"""Streamlit front-end for the AI storyboard and animation pipeline.
 
 Run with:
     streamlit run app.py
@@ -51,20 +51,23 @@ def _inject_styles() -> None:
         """
         <style>
             :root {
-                --bg: #f4f1ea;
-                --surface: rgba(255, 252, 246, 0.92);
-                --surface-strong: #fffdf9;
-                --border: rgba(53, 45, 38, 0.12);
-                --text: #211c16;
-                --muted: #6a625a;
-                --accent: #8b5e34;
-                --accent-soft: rgba(139, 94, 52, 0.12);
+                --surface: rgba(18, 23, 31, 0.9);
+                --surface-strong: rgba(12, 16, 23, 0.96);
+                --surface-soft: rgba(28, 35, 46, 0.78);
+                --border: rgba(159, 178, 202, 0.16);
+                --text: #edf3fb;
+                --muted: #9eafc4;
+                --accent: #6ab7ff;
+                --accent-soft: rgba(106, 183, 255, 0.14);
+                --accent-strong: #8fd0ff;
+                --success: #7dd6b4;
             }
 
             .stApp {
                 background:
-                    radial-gradient(circle at top right, rgba(181, 151, 112, 0.18), transparent 26%),
-                    linear-gradient(180deg, #f8f4ee 0%, #efe7db 100%);
+                    radial-gradient(circle at top right, rgba(76, 148, 255, 0.20), transparent 24%),
+                    radial-gradient(circle at left top, rgba(34, 209, 238, 0.10), transparent 18%),
+                    linear-gradient(180deg, #081019 0%, #0d1520 42%, #101824 100%);
                 color: var(--text);
             }
 
@@ -75,12 +78,18 @@ def _inject_styles() -> None:
             }
 
             [data-testid="stSidebar"] {
-                background: linear-gradient(180deg, #221c18 0%, #2f2722 100%);
-                border-right: 1px solid rgba(255, 255, 255, 0.08);
+                background: linear-gradient(180deg, rgba(7, 11, 17, 0.98) 0%, rgba(12, 18, 28, 0.98) 100%);
+                border-right: 1px solid rgba(143, 208, 255, 0.12);
             }
 
             [data-testid="stSidebar"] * {
-                color: #f7f1e8;
+                color: var(--text);
+            }
+
+            [data-testid="stSidebar"] .stSelectbox label,
+            [data-testid="stSidebar"] .stMarkdown,
+            [data-testid="stSidebar"] .stCaption {
+                color: var(--muted);
             }
 
             .hero-shell,
@@ -90,12 +99,14 @@ def _inject_styles() -> None:
                 background: var(--surface);
                 border: 1px solid var(--border);
                 border-radius: 22px;
-                box-shadow: 0 18px 45px rgba(55, 43, 31, 0.08);
+                box-shadow: 0 20px 55px rgba(2, 8, 18, 0.45);
                 backdrop-filter: blur(10px);
             }
 
             .hero-shell {
-                padding: 2rem 2.1rem;
+                background:
+                    linear-gradient(135deg, rgba(23, 30, 42, 0.96) 0%, rgba(13, 18, 27, 0.96) 100%);
+                padding: 2.2rem 2.2rem;
                 margin-bottom: 1.3rem;
             }
 
@@ -144,9 +155,35 @@ def _inject_styles() -> None:
                 letter-spacing: -0.02em;
             }
 
+            .mini-list {
+                margin: 0.85rem 0 0 0;
+                padding: 0;
+                list-style: none;
+            }
+
+            .mini-list li {
+                margin: 0.45rem 0;
+                color: var(--muted);
+                padding-left: 1rem;
+                position: relative;
+            }
+
+            .mini-list li::before {
+                content: "";
+                position: absolute;
+                left: 0;
+                top: 0.7rem;
+                width: 0.42rem;
+                height: 0.42rem;
+                border-radius: 999px;
+                background: var(--accent);
+                box-shadow: 0 0 12px rgba(106, 183, 255, 0.45);
+            }
+
             .stat-card {
                 padding: 1rem 1.1rem;
                 height: 100%;
+                background: linear-gradient(180deg, rgba(23, 30, 42, 0.92) 0%, rgba(16, 22, 32, 0.92) 100%);
             }
 
             .stat-label {
@@ -181,15 +218,16 @@ def _inject_styles() -> None:
             .stButton > button {
                 border-radius: 999px;
                 border: 1px solid transparent;
-                background: linear-gradient(135deg, #8b5e34 0%, #67472c 100%);
-                color: #fff9f2;
+                background: linear-gradient(135deg, #3f90e8 0%, #1b6fd1 100%);
+                color: #eef7ff;
                 font-weight: 650;
                 min-height: 3rem;
+                box-shadow: 0 14px 32px rgba(27, 111, 209, 0.32);
             }
 
             .stButton > button:hover {
-                border-color: rgba(255, 255, 255, 0.12);
-                background: linear-gradient(135deg, #7d542f 0%, #563a24 100%);
+                border-color: rgba(143, 208, 255, 0.18);
+                background: linear-gradient(135deg, #4a9bf2 0%, #2a7de0 100%);
             }
 
             .stTextArea textarea,
@@ -198,8 +236,20 @@ def _inject_styles() -> None:
             }
 
             .stTextArea textarea {
-                background: rgba(255, 255, 255, 0.76);
-                border: 1px solid rgba(53, 45, 38, 0.12);
+                background: rgba(9, 14, 21, 0.88);
+                color: var(--text);
+                border: 1px solid rgba(143, 208, 255, 0.14);
+            }
+
+            .stTextArea textarea::placeholder {
+                color: #73859b;
+            }
+
+            .stSelectbox [data-baseweb="select"] > div,
+            [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] > div {
+                background: rgba(10, 14, 21, 0.9);
+                border: 1px solid rgba(143, 208, 255, 0.14);
+                color: var(--text);
             }
 
             .stTabs [data-baseweb="tab-list"] {
@@ -207,10 +257,25 @@ def _inject_styles() -> None:
             }
 
             .stTabs [data-baseweb="tab"] {
-                background: rgba(255, 255, 255, 0.5);
+                background: rgba(255, 255, 255, 0.06);
                 border-radius: 999px;
                 padding-left: 1rem;
                 padding-right: 1rem;
+            }
+
+            [data-testid="stStatusWidget"] {
+                background: rgba(10, 15, 22, 0.82);
+                border: 1px solid rgba(143, 208, 255, 0.14);
+            }
+
+            [data-testid="stAlert"] {
+                background: rgba(16, 23, 34, 0.94);
+                color: var(--text);
+                border: 1px solid rgba(143, 208, 255, 0.12);
+            }
+
+            hr {
+                border-color: rgba(143, 208, 255, 0.10);
             }
         </style>
         """,
@@ -223,7 +288,7 @@ def _inject_styles() -> None:
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="AI Script to Screen",
+    page_title="AI Storyboard Studio",
     layout="wide",
 )
 
@@ -234,34 +299,40 @@ _inject_styles()
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.title("Configuration")
+    st.title("Production Setup")
     st.divider()
 
-    st.subheader("Pipeline Models")
+    st.subheader("Pipeline Engines")
     script_model = st.selectbox(
-        "Script Refiner",
+        "Refiner Engine",
         list(_SCRIPT_REFINERS.keys()),
-        help="Model used to split raw text into structured scene descriptions.",
+        help="Engine used to convert a topic brief into structured scene and script-ready refinements.",
     )
     storyboard_model = st.selectbox(
-        "Storyboard Generator",
+        "Storyboard Engine",
         list(_STORYBOARD_GENERATORS.keys()),
-        help="Model used to generate a visual reference image for each scene.",
+        help="Engine used to generate sketch frames and storyboard material for the workbook package.",
     )
     video_model = st.selectbox(
-        "Video Generator",
+        "Animation Engine",
         list(_VIDEO_GENERATORS.keys()),
-        help="Model used to assemble the storyboard images into a video.",
+        help="Engine used to render the final animation with voice, sound design, and music layers.",
     )
 
     st.divider()
     st.markdown(
         """
         <div class="panel">
-            <div class="panel-title">Backend Registry</div>
+            <div class="panel-title">Deliverable Scope</div>
             <div class="panel-copy">
-                Add new AI backends by registering them in the model registry dictionaries in app.py.
+                This workspace is structured for topic intake, narrative refinement, storyboard workbook output,
+                and final animation delivery.
             </div>
+            <ul class="mini-list">
+                <li>Input: topic with supporting description</li>
+                <li>Storyboard workbook: script, shot notes, sketches, and frame descriptions</li>
+                <li>Final render: animation with dialogue, effects, ambience, and music</li>
+            </ul>
         </div>
         """,
         unsafe_allow_html=True,
@@ -274,11 +345,12 @@ with st.sidebar:
 st.markdown(
     """
     <section class="hero-shell">
-        <div class="hero-kicker">Creative Pipeline</div>
-        <h1 class="hero-title">AI Script to Screen</h1>
+        <div class="hero-kicker">Pre-Production to Final Render</div>
+        <h1 class="hero-title">AI Storyboard and Animation Studio</h1>
         <p class="hero-copy">
-            Turn raw narrative text into structured scenes, storyboard frames, and a final video output
-            from a single production workspace.
+            Start from a topic and short description, refine it into structured scenes and script notes,
+            assemble storyboard sketches into an Excel workbook, and prepare the final animation output
+            with sound, voice, and music direction.
         </p>
     </section>
     """,
@@ -291,29 +363,44 @@ with intro_col:
     st.markdown(
         """
         <div class="panel">
-            <div class="section-title">Project Brief</div>
+            <div class="section-title">Input Brief</div>
             <div class="section-copy">
-                Paste a script, treatment, or short story and run the pipeline to break it into scenes,
-                generate visual references, and produce a draft video artifact.
+                Enter a topic with several sentences of description. The pipeline is framed around creative
+                development for storyboard production, workbook export, and final animation packaging.
             </div>
+            <ul class="mini-list">
+                <li>Refiner output: clearer story structure, shot intent, and script-ready scene breakdown</li>
+                <li>Storyboard output: sketches and frame descriptions for an Excel storyboard file (分鏡)</li>
+                <li>Final output: animation render intended for sound design, dialogue, and background music</li>
+            </ul>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 with workflow_col:
-    stage_a, stage_b, stage_c = st.columns(3, gap="small")
+    stage_a, stage_b, stage_c, stage_d = st.columns(4, gap="small")
     with stage_a:
         st.markdown(
             """
             <div class="stat-card">
-                <div class="stat-label">Stage 1</div>
-                <div class="stat-value">Refine</div>
+                <div class="stat-label">Input</div>
+                <div class="stat-value">Topic</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
     with stage_b:
+        st.markdown(
+            """
+            <div class="stat-card">
+                <div class="stat-label">Stage 1</div>
+                <div class="stat-value">Refiner</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with stage_c:
         st.markdown(
             """
             <div class="stat-card">
@@ -323,28 +410,28 @@ with workflow_col:
             """,
             unsafe_allow_html=True,
         )
-    with stage_c:
+    with stage_d:
         st.markdown(
             """
             <div class="stat-card">
                 <div class="stat-label">Stage 3</div>
-                <div class="stat-value">Video</div>
+                <div class="stat-value">Animation</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
 raw_text = st.text_area(
-    "Enter your script or story",
+    "Topic and Description",
     placeholder=(
-        "A robot explores a jungle. "
-        "It discovers an ancient ruin. "
-        "The robot makes contact with alien life."
+        "Topic: A young inventor builds a rescue drone for a flooded town. "
+        "Description: The story should feel hopeful and cinematic, with clear escalation, "
+        "emotional beats, and visuals that can be translated into storyboard sketches and a final animation."
     ),
     height=200,
 )
 
-run_btn = st.button("Run Pipeline", use_container_width=True, type="primary")
+run_btn = st.button("Generate Production Package", use_container_width=True, type="primary")
 
 # ---------------------------------------------------------------------------
 # Pipeline execution
@@ -352,7 +439,7 @@ run_btn = st.button("Run Pipeline", use_container_width=True, type="primary")
 
 if run_btn:
     if not raw_text.strip():
-        st.warning("Please enter some text before running the pipeline.")
+        st.warning("Please enter a topic and description before running the pipeline.")
         st.stop()
 
     # Instantiate the selected backends.
@@ -364,12 +451,12 @@ if run_btn:
     video_gen: VideoGenerator = _load_class(_VIDEO_GENERATORS, video_model)()
 
     # ------------------------------------------------------------------
-    # Step 1 – Script refinement
+    # Step 1 – Narrative refinement
     # ------------------------------------------------------------------
-    with st.status("Step 1: Refining script", expanded=True) as step1:
+    with st.status("Step 1: Refining topic into structured scenes and script notes", expanded=True) as step1:
         scenes = refiner.refine(raw_text)
         step1.update(
-            label=f"Step 1 complete: script refined into {len(scenes)} scene(s)",
+            label=f"Step 1 complete: refiner produced {len(scenes)} structured scene(s)",
             state="complete",
         )
 
@@ -378,12 +465,25 @@ if run_btn:
         st.markdown(
             f"""
             <div class="stat-card">
-                <div class="stat-label">Scenes</div>
+                <div class="stat-label">Refined Scenes</div>
                 <div class="stat-value">{len(scenes)}</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+
+    st.markdown(
+        """
+        <div class="panel">
+            <div class="section-title">Refined Narrative Breakdown</div>
+            <div class="section-copy">
+                The refiner stage converts the original topic brief into clearer scene units that can feed
+                storyboard descriptions, shot planning, and script development.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     for i, scene in enumerate(scenes, 1):
         scene_text = html.escape(scene).replace("\n", "<br>")
@@ -400,12 +500,12 @@ if run_btn:
     st.divider()
 
     # ------------------------------------------------------------------
-    # Step 2 – Storyboard generation
+    # Step 2 – Storyboard asset generation
     # ------------------------------------------------------------------
-    with st.status("Step 2: Generating storyboard", expanded=True) as step2:
+    with st.status("Step 2: Generating sketches and storyboard workbook assets", expanded=True) as step2:
         image_paths = storyboard_gen.generate(scenes)
         step2.update(
-            label=f"Step 2 complete: {len(image_paths)} storyboard image(s) generated",
+            label=f"Step 2 complete: {len(image_paths)} storyboard sketch asset(s) prepared",
             state="complete",
         )
 
@@ -413,34 +513,49 @@ if run_btn:
         st.markdown(
             f"""
             <div class="stat-card">
-                <div class="stat-label">Storyboard Frames</div>
+                <div class="stat-label">Sketch Frames</div>
                 <div class="stat-value">{len(image_paths)}</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+
+    st.markdown(
+        """
+        <div class="panel">
+            <div class="section-title">Storyboard Workbook (分鏡)</div>
+            <div class="section-copy">
+                This stage is framed to build an Excel storyboard file containing shot descriptions,
+                sketches, and script lines for each frame. The current mock backend produces sketch placeholders,
+                but the UI now reflects the intended workbook deliverable.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if image_paths:
         num_cols = min(len(image_paths), 4)
         cols = st.columns(num_cols)
         for idx, path in enumerate(image_paths):
             with cols[idx % num_cols]:
-                st.caption(f"Scene {idx + 1}")
+                st.caption(f"Sketch {idx + 1}")
                 if os.path.exists(path):
                     st.image(path, use_column_width="auto")
                 else:
-                    st.info(f"`{path}`\n\n*(placeholder – no file on disk)*")
+                    st.info(f"`{path}`\n\n*(placeholder sketch asset – no file on disk)*")
     else:
-        st.info("No storyboard images were produced.")
+        st.info("No storyboard sketch assets were produced.")
 
     st.divider()
 
     # ------------------------------------------------------------------
-    # Step 3 – Video generation
+    # Step 3 – Animation rendering
     # ------------------------------------------------------------------
-    with st.status("Step 3: Generating video", expanded=True) as step3:
+    with st.status("Step 3: Rendering final animation and sound package", expanded=True) as step3:
         video_path = video_gen.generate(image_paths)
         step3.update(
-            label=f"Step 3 complete: video generated at {video_path}",
+            label=f"Step 3 complete: animation output generated at {video_path}",
             state="complete",
         )
 
@@ -448,18 +563,31 @@ if run_btn:
         st.markdown(
             f"""
             <div class="stat-card">
-                <div class="stat-label">Output</div>
+                <div class="stat-label">Final Delivery</div>
                 <div class="stat-value">Ready</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    st.subheader("Output Video")
+    st.markdown(
+        """
+        <div class="panel">
+            <div class="section-title">Final Animation Output</div>
+            <div class="section-copy">
+                The final delivery target is an animation render that can include dialogue, sound effects,
+                ambience, and background music. The current mock backend returns a placeholder video path.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.subheader("Animation Preview")
     if os.path.exists(video_path):
         st.video(video_path)
     else:
         st.success(
             f"Pipeline complete! Output: `{video_path}`\n\n"
-            "*(Replace the mock backends with real AI services to produce an actual video file.)*"
+            "*(Replace the mock backends with real AI services to produce the storyboard workbook and final animation assets.)*"
         )

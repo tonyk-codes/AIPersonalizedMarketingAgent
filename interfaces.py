@@ -44,6 +44,7 @@ class MarketingAssets:
     slogan: str
     headline: str
     script: str
+    final_slogan_text: str = ""
     video_path: str | None = None
     debug_metadata: dict[str, Any] | None = None
 
@@ -58,13 +59,25 @@ class ProductEncoder(Protocol):
         ...
 
 
-class CopyGenerator(Protocol):
+class SloganGenerator(Protocol):
     def generate(
         self,
         profile: CustomerProfile,
         encoded_profile: EncodedProfile,
         product: ProductInfo,
         encoded_product: EncodedProduct,
+    ) -> str:
+        ...
+
+
+class ScriptGenerator(Protocol):
+    def generate(
+        self,
+        profile: CustomerProfile,
+        encoded_profile: EncodedProfile,
+        product: ProductInfo,
+        encoded_product: EncodedProduct,
+        slogan: str,
     ) -> MarketingAssets:
         ...
 
@@ -81,7 +94,8 @@ class VideoGenerator(Protocol):
 
 _PROFILE_ENCODERS: dict[str, type[ProfileEncoder]] = {}
 _PRODUCT_ENCODERS: dict[str, type[ProductEncoder]] = {}
-_COPY_GENERATORS: dict[str, type[CopyGenerator]] = {}
+_SLOGAN_GENERATORS: dict[str, type[SloganGenerator]] = {}
+_SCRIPT_GENERATORS: dict[str, type[ScriptGenerator]] = {}
 _VIDEO_GENERATORS: dict[str, type[VideoGenerator]] = {}
 
 
@@ -93,8 +107,12 @@ def register_product_encoder(name: str, implementation: type[ProductEncoder]) ->
     _PRODUCT_ENCODERS[name] = implementation
 
 
-def register_copy_generator(name: str, implementation: type[CopyGenerator]) -> None:
-    _COPY_GENERATORS[name] = implementation
+def register_slogan_generator(name: str, implementation: type[SloganGenerator]) -> None:
+    _SLOGAN_GENERATORS[name] = implementation
+
+
+def register_script_generator(name: str, implementation: type[ScriptGenerator]) -> None:
+    _SCRIPT_GENERATORS[name] = implementation
 
 
 def register_video_generator(name: str, implementation: type[VideoGenerator]) -> None:
@@ -109,8 +127,12 @@ def get_product_encoder(name: str) -> type[ProductEncoder]:
     return _PRODUCT_ENCODERS[name]
 
 
-def get_copy_generator(name: str) -> type[CopyGenerator]:
-    return _COPY_GENERATORS[name]
+def get_slogan_generator(name: str) -> type[SloganGenerator]:
+    return _SLOGAN_GENERATORS[name]
+
+
+def get_script_generator(name: str) -> type[ScriptGenerator]:
+    return _SCRIPT_GENERATORS[name]
 
 
 def get_video_generator(name: str) -> type[VideoGenerator]:
@@ -121,6 +143,7 @@ def list_registered_stages() -> dict[str, list[str]]:
     return {
         "profile_encoders": sorted(_PROFILE_ENCODERS.keys()),
         "product_encoders": sorted(_PRODUCT_ENCODERS.keys()),
-        "copy_generators": sorted(_COPY_GENERATORS.keys()),
+        "slogan_generators": sorted(_SLOGAN_GENERATORS.keys()),
+        "script_generators": sorted(_SCRIPT_GENERATORS.keys()),
         "video_generators": sorted(_VIDEO_GENERATORS.keys()),
     }

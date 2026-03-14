@@ -19,8 +19,8 @@ PROFILE_EMBEDDING_MODEL_ID = os.getenv(
     "PROFILE_EMBEDDING_MODEL_ID", "sentence-transformers/all-MiniLM-L6-v2"
 )
 PRODUCT_CLIP_MODEL_ID = os.getenv("PRODUCT_CLIP_MODEL_ID", "openai/clip-vit-base-patch32")
-# TODO: replace this with your fine-tuned model id, e.g. my-username/nike-marketing-flan-t5-base.
-COPY_GENERATION_MODEL_ID = os.getenv("COPY_GENERATION_MODEL_ID", "google/flan-t5-base")
+SLOGAN_GENERATION_MODEL_ID = os.getenv("SLOGAN_GENERATION_MODEL_ID", "google/flan-t5-base")
+SCRIPT_GENERATION_MODEL_ID = os.getenv("SCRIPT_GENERATION_MODEL_ID", "google/flan-t5-base")
 VIDEO_MODEL_ID = os.getenv("VIDEO_MODEL_ID", "Wan-AI/Wan2.2-TI2V-5B-Diffusers")
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
@@ -30,9 +30,10 @@ USE_LOCAL_DIFFUSERS_VIDEO = os.getenv("USE_LOCAL_DIFFUSERS_VIDEO", "false").lowe
 FORCE_MOCK_MODE = os.getenv("FORCE_MOCK_MODE", "false").lower() == "true"
 
 DEFAULT_VIDEO_DURATION_SECONDS = int(os.getenv("DEFAULT_VIDEO_DURATION_SECONDS", "4"))
-DEFAULT_VIDEO_WIDTH = int(os.getenv("DEFAULT_VIDEO_WIDTH", "768"))
-DEFAULT_VIDEO_HEIGHT = int(os.getenv("DEFAULT_VIDEO_HEIGHT", "432"))
+DEFAULT_VIDEO_WIDTH = int(os.getenv("DEFAULT_VIDEO_WIDTH", "854"))
+DEFAULT_VIDEO_HEIGHT = int(os.getenv("DEFAULT_VIDEO_HEIGHT", "480"))
 DEFAULT_VIDEO_FPS = int(os.getenv("DEFAULT_VIDEO_FPS", "20"))
+FINAL_SLOGAN_FRAME_SECONDS = float(os.getenv("FINAL_SLOGAN_FRAME_SECONDS", "1.5"))
 
 
 def ensure_artifact_dirs() -> None:

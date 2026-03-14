@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 
 from interfaces import (
-    CopyGenerator,
     CustomerProfile,
     EncodedProduct,
     EncodedProfile,
@@ -13,6 +12,8 @@ from interfaces import (
     ProductEncoder,
     ProductInfo,
     ProfileEncoder,
+    ScriptGenerator,
+    SloganGenerator,
     VideoGenerator,
 )
 from media_utils import create_fallback_banner_video, sanitize_filename
@@ -53,15 +54,26 @@ class MockProductEncoder(ProductEncoder):
         )
 
 
-class MockCopyGenerator(CopyGenerator):
+class MockSloganGenerator(SloganGenerator):
     def generate(
         self,
         profile: CustomerProfile,
         encoded_profile: EncodedProfile,
         product: ProductInfo,
         encoded_product: EncodedProduct,
+    ) -> str:
+        return f"Own Every Step in {product.name.split()[-1]}"
+
+
+class MockScriptGenerator(ScriptGenerator):
+    def generate(
+        self,
+        profile: CustomerProfile,
+        encoded_profile: EncodedProfile,
+        product: ProductInfo,
+        encoded_product: EncodedProduct,
+        slogan: str,
     ) -> MarketingAssets:
-        slogan = f"{profile.name}, Own Every Step"
         headline = f"{product.name} built for your {product.category.lower()} rhythm"
         script = (
             f"Meet {profile.name}'s personalized Nike moment. "
@@ -74,6 +86,7 @@ class MockCopyGenerator(CopyGenerator):
             slogan=slogan,
             headline=headline,
             script=script,
+            final_slogan_text=f"{slogan}, {profile.name}",
             debug_metadata={"mode": "mock", "profile_summary": encoded_profile.profile_summary},
         )
 
@@ -86,4 +99,5 @@ class MockVideoGenerator(VideoGenerator):
             slogan=assets.slogan,
             headline=assets.headline,
             output_stem=stem,
+            final_slogan_text=assets.final_slogan_text or f"{assets.slogan}, {profile.name}",
         )

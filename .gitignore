@@ -18,3 +18,7 @@ env/
 
 # pytest cache
 .pytest_cache/
+
+secrets.toml
+.streamlit/secrets.toml
+.streamlit/

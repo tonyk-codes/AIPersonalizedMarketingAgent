@@ -1,19 +1,19 @@
-# Smart Nike Shoe Ad Studio
+# Machine Learning for Personalized Marketing
 
-Personalized Nike Shoe Video Ads with Hugging Face multi-modal pipelines.
+Personalized Nike-style product ads built with chained Hugging Face pipelines and a Streamlit storefront preview.
 
 This Streamlit app generates a personalized Nike-style marketing video experience from a customer profile:
 - Name, Age, Gender, Nationality, Language, Product
-- Optional customer notes
+- Optional customer notes at the data-model level for future extension
 
-The UI mimics a Nike online storefront and replaces the hero banner with a generated promotional video when the user clicks Generate Marketing Video.
+The UI mimics a Nike Hong Kong-style online storefront and replaces the hero banner with a generated promotional video when the user clicks Generate Marketing Video.
 
 ## Business Objective
 
-Smart Nike Shoe Ad Studio demonstrates how profile-level personalization can be transformed into targeted, product-specific ad creative:
+This project demonstrates how profile-level personalization can be transformed into targeted, product-specific ad creative:
 - The customer profile drives personalization intent.
 - A curated Nike shoe catalog anchors product context.
-- Hugging Face pipelines generate ad copy and video assets.
+- Separate Hugging Face pipelines generate a slogan, script, and cinematic video asset.
 
 This project is designed for:
 - ISOM5240 Deep Learning coursework (Hugging Face-only model stack)
@@ -22,11 +22,12 @@ This project is designed for:
 
 ## Pipeline Architecture
 
-Core flow (4 stages):
+Core flow (5 stages):
 1. User Profile Embedding
 2. Product Understanding / Embedding
-3. Personalized Marketing Script and Slogan
-4. Image/Text to Video Generation (with robust fallback banner video)
+3. Personalized Slogan Generation
+4. Personalized Script Generation
+5. Cinematic 480p Video Generation and End Card Composition
 
 Logical diagram:
 
@@ -43,14 +44,26 @@ Selected Nike Product (name/category/image/url)
 [Pipeline 2] Product Encoder (CLIP text+image)
 				|
 				v
-[Pipeline 3] Copy Generator (FLAN-T5 or fine-tuned variant)
+[Pipeline 3a] Slogan Generator (FLAN-T5 or fine-tuned variant)
 				|
 				v
-[Pipeline 4] Video Generator (HF Inference API or fallback video)
+[Pipeline 3b] Script Generator (FLAN-T5 or fine-tuned variant)
+				|
+				v
+[Pipeline 4] Video Generator (Wan TI2V prompt + 480p composition)
+				|
+				v
+[Pipeline 5] Final Slogan End Card (moviepy)
 				|
 				v
 Nike-style storefront hero banner video + slogan + script
 ```
+
+Video behavior:
+- Target output resolution is 854x480 by default.
+- If the generated clip is not already 480p, it is resized and center-cropped to 480p before saving.
+- Every final MP4 appends a 1.5 second branded end card showing `"<SLOGAN>, <Name>"`.
+- Video prompts are written to request realistic, cinematic footage of a synthetic person matching the customer profile.
 
 ## Hugging Face Models
 
@@ -65,7 +78,11 @@ Default model ids are configurable in config.py.
 	- Link: https://huggingface.co/openai/clip-vit-base-patch32
 
 - google/flan-t5-base
-	- Role: slogan/headline/script generation (Pipeline 3)
+	- Role: personalized slogan generation (Pipeline 3a)
+	- Link: https://huggingface.co/google/flan-t5-base
+
+- google/flan-t5-base
+	- Role: personalized headline/script generation (Pipeline 3b)
 	- Link: https://huggingface.co/google/flan-t5-base
 
 - Wan-AI/Wan2.2-TI2V-5B-Diffusers
@@ -74,11 +91,11 @@ Default model ids are configurable in config.py.
 
 ## Fine-Tuned Model Hook
 
-Pipeline 3 is designed to be replaced by your own fine-tuned marketing model.
+Pipelines 3a and 3b are designed to be replaced by your own fine-tuned marketing models.
 
 Where to plug in:
-- Update COPY_GENERATION_MODEL_ID in config.py
-- Optionally set environment variable COPY_GENERATION_MODEL_ID in .env
+- Update SLOGAN_GENERATION_MODEL_ID and SCRIPT_GENERATION_MODEL_ID in config.py
+- Optionally set environment variables SLOGAN_GENERATION_MODEL_ID and SCRIPT_GENERATION_MODEL_ID in .env
 
 Example target model id:
 - my-username/nike-marketing-flan-t5-base
@@ -86,13 +103,13 @@ Example target model id:
 ## Project Structure
 
 ```text
-app.py                  Streamlit UI and pipeline orchestration
+app.py                  Streamlit UI, Nike-style preview, and pipeline orchestration
 interfaces.py           Dataclasses, protocols, and stage registries
-hf_pipelines.py         Hugging Face implementations for all 4 stages
+hf_pipelines.py         Hugging Face implementations for profile, slogan, script, and video stages
 mock_implementations.py Deterministic no-network fallback implementations
 nike_catalog.py         Curated Nike shoe catalog helpers
-media_utils.py          Video/image utility helpers and fallback banner video
-config.py               Model IDs, tokens, feature flags, artifact paths
+media_utils.py          480p video composition, end card generation, and image utilities
+config.py               Model IDs, tokens, 480p defaults, feature flags, artifact paths
 requirements.txt        Python dependencies
 ```
 
@@ -120,7 +137,7 @@ streamlit run app.py
 
 This app is optimized for constrained environments:
 - Heavy video generation defaults to Hugging Face Inference API mode when token is available.
-- If token/video inference is unavailable, app falls back to a generated static-banner MP4 so the full flow still works.
+- If token/video inference is unavailable, app falls back to a generated Ken Burns style MP4 at 480p with a branded end card so the full flow still works.
 - Cache usage:
 	- @st.cache_data for catalog and deterministic image prep
 	- @st.cache_resource for model/client loaders
@@ -128,12 +145,13 @@ This app is optimized for constrained environments:
 ## UI Behavior
 
 - Sidebar inputs:
-	- Name, Age, Gender, Nationality, Language, Product, Additional notes
+	- Name, Age, Gender, Nationality, Language, Product
 - Action:
 	- Generate Marketing Video
 - Main panel:
-	- Nike-style storefront layout
-	- Hero banner becomes generated video
+	- Pipeline overview and live processing log
+	- Nike-style storefront layout in the right column
+	- Hero banner becomes a generated 480p video with a final slogan frame
 	- Displays personalized slogan, headline, and script
 
 ## Limitations
@@ -142,6 +160,7 @@ This app is optimized for constrained environments:
 - Inference latency depends on model availability and queue time.
 - Current text generation enforces English output for consistency.
 - Catalog is curated demo data, not a live Nike commerce feed.
+- When hosted video generation is unavailable, the fallback clip cannot fully reproduce synthetic human motion from the prompt.
 
 ## Future Work
 

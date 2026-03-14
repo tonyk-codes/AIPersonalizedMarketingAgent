@@ -21,7 +21,6 @@ from transformers import (
 
 import config
 from interfaces import (
-    CopyGenerator,
     CustomerProfile,
     EncodedProduct,
     EncodedProfile,
@@ -29,9 +28,17 @@ from interfaces import (
     ProductEncoder,
     ProductInfo,
     ProfileEncoder,
+    ScriptGenerator,
+    SloganGenerator,
     VideoGenerator,
 )
-from media_utils import create_fallback_banner_video, ensure_local_image, save_video_bytes, sanitize_filename
+from media_utils import (
+    compose_final_ad_video,
+    create_fallback_banner_video,
+    ensure_local_image,
+    save_video_bytes,
+    sanitize_filename,
+)
 
 
 def _deterministic_embedding(text: str, size: int = 384) -> list[float]:
@@ -57,19 +64,48 @@ def build_profile_summary(profile: CustomerProfile) -> str:
     )
 
 
-def build_copy_prompt(
+def _age_group(age: int) -> str:
+    if age < 18:
+        return "teenager"
+    if age < 30:
+        return "person in their 20s"
+    if age < 40:
+        return "person in their 30s"
+    if age < 50:
+        return "person in their 40s"
+    return "mature adult"
+
+
+def build_slogan_prompt(
     profile_summary: str,
     product: ProductInfo,
     product_attributes: dict[str, str],
 ) -> str:
-    """Pure helper for text-to-text generation prompts."""
+    attrs = ", ".join(f"{k}: {v}" for k, v in product_attributes.items()) or "No attributes provided"
+    return (
+        "You are a Nike marketing slogan expert. "
+        "Create ONE short, punchy slogan with at most 10 words. "
+        "Return ONLY the slogan text, no explanation, no quotation marks.\n\n"
+        f"Customer profile: {profile_summary}\n"
+        f"Shoe: {product.name} - {product.category}\n"
+        f"Product attributes: {attrs}\n"
+        "Make it tailored to the customer and directly relevant to the shoe."
+    )
+
+
+def build_script_prompt(
+    profile_summary: str,
+    slogan: str,
+    product: ProductInfo,
+    product_attributes: dict[str, str],
+) -> str:
     attrs = ", ".join(f"{k}: {v}" for k, v in product_attributes.items()) or "No attributes provided"
     return (
         "You are a Nike marketing copywriter. Write personalized ad copy in English only. "
-        "Create output as strict JSON with keys: slogan, headline, script. "
-        "slogan should be 5-10 words. headline should be one line. "
-        "script should be 3-5 sentences and suitable for 15-40 second narration.\n\n"
+        "Create output as strict JSON with keys: headline, script. "
+        "headline should be one line. script should be 3-5 sentences and suitable for 15-40 second narration.\n\n"
         f"Customer profile: {profile_summary}\n"
+        f"Approved slogan: {slogan}\n"
         f"Product name: {product.name}\n"
         f"Product category: {product.category}\n"
         f"Product audience: {product.gender}\n"
@@ -81,22 +117,31 @@ def build_copy_prompt(
     )
 
 
-def parse_generated_copy(raw_output: str) -> tuple[str, str, str]:
-    """Pure helper to parse JSON-like text generation output."""
+def parse_generated_slogan(raw_output: str) -> str:
+    raw_output = (raw_output or "").strip()
+    if not raw_output:
+        return "Move Beyond Limits"
+
+    slogan = raw_output.splitlines()[0].strip().strip('"')
+    words = slogan.split()
+    if len(words) > 10:
+        slogan = " ".join(words[:10])
+    return slogan[:80] or "Move Beyond Limits"
+
+
+def parse_generated_script(raw_output: str) -> tuple[str, str]:
     raw_output = (raw_output or "").strip()
     if not raw_output:
         return (
-            "Move Beyond Limits",
             "Designed for your next step.",
             "These Nike shoes are tailored to your lifestyle and goals. Move with confidence and style every day.",
         )
 
     try:
         parsed = json.loads(raw_output)
-        slogan = str(parsed.get("slogan", "Move Beyond Limits")).strip()
         headline = str(parsed.get("headline", "Designed for your next step.")).strip()
         script = str(parsed.get("script", "Feel the energy in every stride.")).strip()
-        return slogan, headline, script
+        return headline, script
     except json.JSONDecodeError:
         pass
 
@@ -104,18 +149,16 @@ def parse_generated_copy(raw_output: str) -> tuple[str, str, str]:
     if json_match:
         try:
             parsed = json.loads(json_match.group(0))
-            slogan = str(parsed.get("slogan", "Move Beyond Limits")).strip()
             headline = str(parsed.get("headline", "Designed for your next step.")).strip()
             script = str(parsed.get("script", "Feel the energy in every stride.")).strip()
-            return slogan, headline, script
+            return headline, script
         except json.JSONDecodeError:
             pass
 
     lines = [line.strip("-• ") for line in raw_output.splitlines() if line.strip()]
-    slogan = lines[0] if lines else "Move Beyond Limits"
-    headline = lines[1] if len(lines) > 1 else "Designed for your next step."
-    script = " ".join(lines[2:]) if len(lines) > 2 else raw_output
-    return slogan[:80], headline[:120], script
+    headline = lines[0] if lines else "Designed for your next step."
+    script = " ".join(lines[1:]) if len(lines) > 1 else raw_output
+    return headline[:120], script
 
 
 @st.cache_resource(show_spinner=False)
@@ -213,12 +256,11 @@ class HFProductEncoder(ProductEncoder):
         return EncodedProduct(product_summary=summary, embedding=embedding, attributes=attributes)
 
 
-class HFCopyGenerator(CopyGenerator):
-    """Pipeline 3: profile+product context to slogan/headline/script."""
+class HFSloganGenerator(SloganGenerator):
+    """Pipeline 3a: profile+product context to short slogan."""
 
     def __init__(self, model_id: str | None = None) -> None:
-        # TODO: swap this model id with your fine-tuned marketing copy model hosted on HF Hub.
-        self.model_id = model_id or config.COPY_GENERATION_MODEL_ID
+        self.model_id = model_id or config.SLOGAN_GENERATION_MODEL_ID
 
     def generate(
         self,
@@ -226,9 +268,9 @@ class HFCopyGenerator(CopyGenerator):
         encoded_profile: EncodedProfile,
         product: ProductInfo,
         encoded_product: EncodedProduct,
-    ) -> MarketingAssets:
+    ) -> str:
         tokenizer, model = _load_text2text_components(self.model_id)
-        prompt = build_copy_prompt(
+        prompt = build_slogan_prompt(
             profile_summary=encoded_profile.profile_summary,
             product=product,
             product_attributes=encoded_product.attributes,
@@ -242,7 +284,40 @@ class HFCopyGenerator(CopyGenerator):
                 temperature=0.8,
             )
         raw = tokenizer.decode(outputs[0], skip_special_tokens=True) if len(outputs) else ""
-        slogan, headline, script = parse_generated_copy(raw)
+        return parse_generated_slogan(raw)
+
+
+class HFScriptGenerator(ScriptGenerator):
+    """Pipeline 3b: profile+product context to headline and long-form script."""
+
+    def __init__(self, model_id: str | None = None) -> None:
+        self.model_id = model_id or config.SCRIPT_GENERATION_MODEL_ID
+
+    def generate(
+        self,
+        profile: CustomerProfile,
+        encoded_profile: EncodedProfile,
+        product: ProductInfo,
+        encoded_product: EncodedProduct,
+        slogan: str,
+    ) -> MarketingAssets:
+        tokenizer, model = _load_text2text_components(self.model_id)
+        prompt = build_script_prompt(
+            profile_summary=encoded_profile.profile_summary,
+            slogan=slogan,
+            product=product,
+            product_attributes=encoded_product.attributes,
+        )
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=220,
+                do_sample=True,
+                temperature=0.8,
+            )
+        raw = tokenizer.decode(outputs[0], skip_special_tokens=True) if len(outputs) else ""
+        headline, script = parse_generated_script(raw)
 
         debug = {
             "model_id": self.model_id,
@@ -263,12 +338,14 @@ class HFVideoGenerator(VideoGenerator):
 
     @staticmethod
     def _build_video_prompt(profile: CustomerProfile, product: ProductInfo, assets: MarketingAssets) -> str:
-        city = profile.nationality or "urban city"
+        city = profile.nationality or "a modern city"
+        age_group = _age_group(profile.age)
         return (
-            f"A cinematic product ad. A person matching profile gender {profile.gender}, age {profile.age}, "
-            f"walking happily in {city} streets at sunset, wearing {product.name}. "
-            f"Mood energetic and premium. Overlay slogan: {assets.slogan}. "
-            "Camera motion smooth, 3-6 second social ad style."
+            f"A synthetic {age_group} {profile.gender} from {city} wearing {product.name} Nike shoes, "
+            "smiling and walking or lightly jogging through a modern city street at golden hour, "
+            "focus on the shoes and natural body movement, realistic, high-quality, cinematic lighting, "
+            "shallow depth of field, 35mm lens, natural colors, smooth camera movement, premium sportswear ad, "
+            "480p video, no logos, no celebrity likeness, synthetic person only."
         )
 
     def _try_inference_api(self, prompt: str) -> bytes | None:
@@ -288,10 +365,16 @@ class HFVideoGenerator(VideoGenerator):
     def generate(self, profile: CustomerProfile, product: ProductInfo, assets: MarketingAssets) -> str:
         prompt = self._build_video_prompt(profile, product, assets)
         output_stem = sanitize_filename(f"{profile.name}-{product.product_id}-ad")
+        final_slogan_text = assets.final_slogan_text or f"{assets.slogan}, {profile.name}"
 
         video_bytes = self._try_inference_api(prompt)
         if video_bytes:
-            return save_video_bytes(video_bytes, prefix=output_stem)
+            raw_video_path = save_video_bytes(video_bytes, prefix=f"{output_stem}-raw")
+            return compose_final_ad_video(
+                source_video_path=raw_video_path,
+                output_stem=output_stem,
+                final_slogan_text=final_slogan_text,
+            )
 
         # Streamlit Cloud-safe fallback when inference or local TI2V is unavailable.
         return create_fallback_banner_video(
@@ -299,4 +382,5 @@ class HFVideoGenerator(VideoGenerator):
             slogan=assets.slogan,
             headline=assets.headline,
             output_stem=output_stem,
+            final_slogan_text=final_slogan_text,
         )

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
 import numpy as np
+from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
 
@@ -24,6 +25,99 @@ def save_video_bytes(video_bytes: bytes, prefix: str = "nike-ad") -> str:
     digest = hashlib.sha1(video_bytes).hexdigest()[:12]
     output_path = config.VIDEOS_DIR / f"{sanitize_filename(prefix)}-{digest}.mp4"
     output_path.write_bytes(video_bytes)
+    return str(output_path)
+
+
+def _resize_and_crop(image: Image.Image, width: int, height: int) -> Image.Image:
+    scale = max(width / image.width, height / image.height)
+    resized = image.resize(
+        (max(1, int(image.width * scale)), max(1, int(image.height * scale))),
+        Image.Resampling.LANCZOS,
+    )
+    left = max(0, (resized.width - width) // 2)
+    top = max(0, (resized.height - height) // 2)
+    return resized.crop((left, top, left + width, top + height))
+
+
+def _load_title_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    candidates = [
+        "arialbd.ttf",
+        "Arial Bold.ttf",
+        "segoeuib.ttf",
+        "HelveticaNeue-Bold.ttf",
+    ]
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _build_end_card_frames(final_slogan_text: str, width: int, height: int, fps: int) -> list[np.ndarray]:
+    frame_count = max(1, int(round(config.FINAL_SLOGAN_FRAME_SECONDS * fps)))
+    title_font = _load_title_font(42)
+    label_font = _load_title_font(18)
+    frames: list[np.ndarray] = []
+
+    for idx in range(frame_count):
+        progress = (idx + 1) / frame_count
+        canvas = Image.new("RGB", (width, height), color=(8, 8, 8))
+        overlay = Image.new("RGBA", (width, height), color=(0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        accent_top = int(height * 0.18)
+        accent_bottom = int(height * 0.82)
+        draw.rectangle((width - 28, accent_top, width - 18, accent_bottom), fill=(255, 255, 255, 210))
+        draw.rectangle((0, height - 72, width, height), fill=(18, 18, 18, 235))
+
+        text_alpha = int(255 * min(1.0, progress * 1.35))
+        text = final_slogan_text.strip() or "Move in your own way"
+        bbox = draw.multiline_textbbox((0, 0), text, font=title_font, spacing=8)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        text_x = max(32, (width - text_width) // 2)
+        text_y = max(48, (height - text_height) // 2 - 18)
+        draw.multiline_text(
+            (text_x, text_y),
+            text,
+            font=title_font,
+            fill=(255, 255, 255, text_alpha),
+            spacing=8,
+            align="center",
+        )
+        draw.text((36, height - 52), "PERSONALIZED NIKE-STYLE AD", font=label_font, fill=(196, 196, 196, text_alpha))
+        composed = Image.alpha_composite(canvas.convert("RGBA"), overlay).convert("RGB")
+        frames.append(np.asarray(composed))
+
+    return frames
+
+
+def compose_final_ad_video(source_video_path: str, output_stem: str, final_slogan_text: str) -> str:
+    config.ensure_artifact_dirs()
+    width = config.DEFAULT_VIDEO_WIDTH
+    height = config.DEFAULT_VIDEO_HEIGHT
+    default_fps = config.DEFAULT_VIDEO_FPS
+    output_path = config.VIDEOS_DIR / f"{sanitize_filename(output_stem)}.mp4"
+
+    with VideoFileClip(source_video_path) as clip:
+        fps = int(round(getattr(clip, "fps", 0) or default_fps))
+        frames = [
+            np.asarray(_resize_and_crop(Image.fromarray(frame).convert("RGB"), width, height))
+            for frame in clip.iter_frames(fps=fps, dtype="uint8")
+        ]
+
+    frames.extend(_build_end_card_frames(final_slogan_text=final_slogan_text, width=width, height=height, fps=fps))
+
+    clip = ImageSequenceClip(frames, fps=fps)
+    clip.write_videofile(
+        str(output_path),
+        codec="libx264",
+        audio=False,
+        preset="ultrafast",
+        logger=None,
+    )
+    clip.close()
     return str(output_path)
 
 
@@ -71,6 +165,7 @@ def create_fallback_banner_video(
     slogan: str,
     headline: str,
     output_stem: str,
+    final_slogan_text: str = "",
     duration_seconds: int | None = None,
 ) -> str:
     """Create a short Ken-Burns-style MP4 when real video generation is unavailable."""
@@ -107,6 +202,9 @@ def create_fallback_banner_video(
 
         composed = Image.alpha_composite(frame.convert("RGBA"), overlay).convert("RGB")
         frames.append(np.asarray(composed))
+
+    end_text = final_slogan_text or slogan
+    frames.extend(_build_end_card_frames(final_slogan_text=end_text, width=width, height=height, fps=fps))
 
     clip = ImageSequenceClip(frames, fps=fps)
     output_path = config.VIDEOS_DIR / f"{sanitize_filename(output_stem)}.mp4"

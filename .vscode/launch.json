@@ -2,7 +2,17 @@
 	"version": "0.2.0",
 	"configurations": [
         
-        {"name":"Python Debugger: Current File","type":"debugpy","request":"launch","program":"${file}","console":"integratedTerminal"},
+		{
+			"name": "Python Debugger: Current File (Selected Interpreter)",
+			"type": "debugpy",
+			"request": "launch",
+			"program": "${file}",
+			"cwd": "${workspaceFolder}",
+			"envFile": "${workspaceFolder}/.env",
+			"python": "${command:python.interpreterPath}",
+			"console": "integratedTerminal",
+			"justMyCode": true
+		},
 
 		{
 			"name": "Streamlit: Run app.py (8501)",
@@ -17,6 +27,7 @@
 			],
 			"cwd": "${workspaceFolder}",
 			"envFile": "${workspaceFolder}/.env",
+			"python": "${command:python.interpreterPath}",
 			"console": "integratedTerminal",
 			"justMyCode": true
 		},
@@ -27,6 +38,7 @@
 			"program": "${workspaceFolder}/app.py",
 			"cwd": "${workspaceFolder}",
 			"envFile": "${workspaceFolder}/.env",
+			"python": "${command:python.interpreterPath}",
 			"console": "integratedTerminal",
 			"justMyCode": true
 		}

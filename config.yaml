@@ -1,17 +1,20 @@
-# AI Script-to-Screen – pipeline configuration
+# Smart Nike Shoe Ad Studio - optional stage selection metadata.
 #
-# For each pipeline stage, set `model` to the backend you want to use.
-# Valid values are listed below each section; add new entries in main.py's
-# registry dicts as you integrate more backends.
+# This file is kept for human-readable configuration notes.
+# Runtime model ids and environment flags are managed in config.py and .env.
 
-script_refiner:
-  # Options: mock
-  model: mock
+profile_encoder:
+  # Options: hf, mock
+  backend: hf
 
-storyboard_generator:
-  # Options: mock
-  model: mock
+product_encoder:
+  # Options: hf, mock
+  backend: hf
+
+copy_generator:
+  # Options: hf, mock
+  backend: hf
 
 video_generator:
-  # Options: mock
-  model: mock
+  # Options: hf, mock
+  backend: hf

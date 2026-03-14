@@ -1,134 +1,302 @@
-import os
-import streamlit as st
-from PIL import Image
-from interfaces import AssemblyStep, InstructionExtractor, InstructionWriter, NarrationGenerator, AnimationGenerator
+"""Hugging Face-backed pipeline implementations for Smart Nike Shoe Ad Studio."""
+
+from __future__ import annotations
+
+import hashlib
 import json
+import re
+from dataclasses import asdict
+from typing import Any, cast
 
-class BasePipeline:
-    def get_token(self):
-        return os.environ.get("HF_TOKEN")
+import streamlit as st
+import torch
+from huggingface_hub import InferenceClient
+from PIL import Image
+from transformers import (
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    CLIPModel,
+    CLIPProcessor,
+)
 
-#
-# Local Transformers/Diffusers Implementations
-#
-class LocalExtractor(BasePipeline, InstructionExtractor):
-    def extract(self, pdf_path: str) -> list[AssemblyStep]:
-        # Implementation of PDF to image and then local VQA/captioning model
-        from transformers import BlipProcessor, BlipForConditionalGeneration
-        import fitz
-        
-        processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-        
-        doc = fitz.open(pdf_path)
-        steps = []
-        for i, page in enumerate(doc):
-            pix = page.get_pixmap()
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            inputs = processor(img, return_tensors="pt")
-            out = model.generate(**inputs)
-            caption = processor.decode(out[0], skip_special_tokens=True)
-            
-            steps.append(AssemblyStep(
-                step_id=i+1, title=f"Action on Page {i+1}", raw_caption=caption,
-                detailed_instruction=None, source_pages=[i], image_paths=[f"page_{i}.png"]
-            ))
-            
-            img.save(f"page_{i}.png")
-        return steps
+import config
+from interfaces import (
+    CopyGenerator,
+    CustomerProfile,
+    EncodedProduct,
+    EncodedProfile,
+    MarketingAssets,
+    ProductEncoder,
+    ProductInfo,
+    ProfileEncoder,
+    VideoGenerator,
+)
+from media_utils import create_fallback_banner_video, ensure_local_image, save_video_bytes, sanitize_filename
 
-class LocalWriter(BasePipeline, InstructionWriter):
-    def write(self, steps: list[AssemblyStep]) -> list[AssemblyStep]:
-        from transformers import pipeline
-        
-        # TODO: Replace 'google/flan-t5-base' with your custom fine-tuned model ID (e.g., 'your-username/ikea-instructions')
-        generator = pipeline("text2text-generation", model="google/flan-t5-base")
-        
-        for step in steps:
-            prompt = f"You are an IKEA assembly expert. Turn this caption into a clear, step-by-step instruction for a beginner: {step.raw_caption}"
-            result = generator(prompt, max_length=150)
-            step.detailed_instruction = result[0]['generated_text']
-        return steps
 
-class LocalNarration(BasePipeline, NarrationGenerator):
-    def generate(self, steps: list[AssemblyStep]) -> list[AssemblyStep]:
-        from transformers import VitsModel, AutoTokenizer
-        import torch
-        import scipy.io.wavfile
+def _deterministic_embedding(text: str, size: int = 384) -> list[float]:
+    """Return deterministic pseudo-embedding for graceful degradation."""
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    values: list[float] = []
+    while len(values) < size:
+        for byte in digest:
+            values.append((byte / 255.0) * 2.0 - 1.0)
+            if len(values) == size:
+                break
+        digest = hashlib.sha256(digest).digest()
+    return values
 
-        model = VitsModel.from_pretrained("facebook/mms-tts-eng")
-        tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
-        
-        for step in steps:
-            inputs = tokenizer(step.detailed_instruction, return_tensors="pt")
+
+def build_profile_summary(profile: CustomerProfile) -> str:
+    """Pure helper used for profile encoding and prompt construction."""
+    notes = profile.additional_notes.strip() or "No additional notes"
+    return (
+        f"Name: {profile.name}; Age: {profile.age}; Gender: {profile.gender}; "
+        f"Nationality: {profile.nationality or 'Not specified'}; Language: {profile.language}; "
+        f"Product ID: {profile.product_id}; Notes: {notes}."
+    )
+
+
+def build_copy_prompt(
+    profile_summary: str,
+    product: ProductInfo,
+    product_attributes: dict[str, str],
+) -> str:
+    """Pure helper for text-to-text generation prompts."""
+    attrs = ", ".join(f"{k}: {v}" for k, v in product_attributes.items()) or "No attributes provided"
+    return (
+        "You are a Nike marketing copywriter. Write personalized ad copy in English only. "
+        "Create output as strict JSON with keys: slogan, headline, script. "
+        "slogan should be 5-10 words. headline should be one line. "
+        "script should be 3-5 sentences and suitable for 15-40 second narration.\n\n"
+        f"Customer profile: {profile_summary}\n"
+        f"Product name: {product.name}\n"
+        f"Product category: {product.category}\n"
+        f"Product audience: {product.gender}\n"
+        f"Product attributes: {attrs}\n"
+        f"Product URL: {product.product_url}\n\n"
+        "Keep the tone aspirational, energetic, and premium. "
+        "Mention practical fit for the customer profile. "
+        "Future multilingual adaptation note: only output English for now."
+    )
+
+
+def parse_generated_copy(raw_output: str) -> tuple[str, str, str]:
+    """Pure helper to parse JSON-like text generation output."""
+    raw_output = (raw_output or "").strip()
+    if not raw_output:
+        return (
+            "Move Beyond Limits",
+            "Designed for your next step.",
+            "These Nike shoes are tailored to your lifestyle and goals. Move with confidence and style every day.",
+        )
+
+    try:
+        parsed = json.loads(raw_output)
+        slogan = str(parsed.get("slogan", "Move Beyond Limits")).strip()
+        headline = str(parsed.get("headline", "Designed for your next step.")).strip()
+        script = str(parsed.get("script", "Feel the energy in every stride.")).strip()
+        return slogan, headline, script
+    except json.JSONDecodeError:
+        pass
+
+    json_match = re.search(r"\{.*\}", raw_output, flags=re.DOTALL)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            slogan = str(parsed.get("slogan", "Move Beyond Limits")).strip()
+            headline = str(parsed.get("headline", "Designed for your next step.")).strip()
+            script = str(parsed.get("script", "Feel the energy in every stride.")).strip()
+            return slogan, headline, script
+        except json.JSONDecodeError:
+            pass
+
+    lines = [line.strip("-• ") for line in raw_output.splitlines() if line.strip()]
+    slogan = lines[0] if lines else "Move Beyond Limits"
+    headline = lines[1] if len(lines) > 1 else "Designed for your next step."
+    script = " ".join(lines[2:]) if len(lines) > 2 else raw_output
+    return slogan[:80], headline[:120], script
+
+
+@st.cache_resource(show_spinner=False)
+def _load_sentence_transformer(model_id: str):
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(model_id)
+
+
+@st.cache_resource(show_spinner=False)
+def _load_clip_components(model_id: str):
+    processor = CLIPProcessor.from_pretrained(model_id)
+    model = CLIPModel.from_pretrained(model_id)
+    model.eval()
+    return processor, model
+
+
+@st.cache_resource(show_spinner=False)
+def _load_text2text_components(model_id: str):
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+    return tokenizer, model
+
+
+@st.cache_resource(show_spinner=False)
+def _load_hf_inference_client(model_id: str, token: str):
+    return cast(Any, InferenceClient(model=model_id, token=token))
+
+
+class HFProfileEncoder(ProfileEncoder):
+    """Pipeline 1: profile text to embedding vector."""
+
+    def __init__(self, model_id: str | None = None) -> None:
+        self.model_id = model_id or config.PROFILE_EMBEDDING_MODEL_ID
+
+    def encode(self, profile: CustomerProfile) -> EncodedProfile:
+        summary = build_profile_summary(profile)
+        try:
+            model = _load_sentence_transformer(self.model_id)
+            embedding = model.encode(summary).tolist()
+        except Exception:
+            embedding = _deterministic_embedding(summary)
+        return EncodedProfile(profile_summary=summary, embedding=embedding)
+
+
+class HFProductEncoder(ProductEncoder):
+    """Pipeline 2: product image+text to embedding vector."""
+
+    def __init__(self, model_id: str | None = None) -> None:
+        self.model_id = model_id or config.PRODUCT_CLIP_MODEL_ID
+
+    @staticmethod
+    def _infer_attributes(product: ProductInfo) -> dict[str, str]:
+        baseline = product.attributes.copy() if product.attributes else {}
+        category_map = {
+            "running": {"support": "smooth transitions", "performance": "distance-ready"},
+            "basketball": {"support": "lateral stability", "performance": "explosive cuts"},
+            "lifestyle": {"support": "all-day comfort", "performance": "street style"},
+            "training": {"support": "multi-direction control", "performance": "gym versatility"},
+        }
+        for key, value in category_map.items():
+            if key in product.category.lower():
+                baseline.update(value)
+                break
+        if "feel" not in baseline:
+            baseline["feel"] = "confident and energetic"
+        return baseline
+
+    def encode(self, product: ProductInfo) -> EncodedProduct:
+        local_image = ensure_local_image(product.image_path_or_url, product.name)
+        attributes = self._infer_attributes(product)
+        summary = (
+            f"{product.name}; category: {product.category}; audience: {product.gender}; "
+            f"attributes: {', '.join(f'{k} {v}' for k, v in attributes.items())}."
+        )
+
+        try:
+            processor, model = _load_clip_components(self.model_id)
+            image = Image.open(local_image).convert("RGB")
+
+            processor_any = cast(Any, processor)
+            model_any = cast(Any, model)
+            text_inputs = processor_any(text=[summary], return_tensors="pt", padding=True, truncation=True)
+            image_inputs = processor_any(images=image, return_tensors="pt")
+
             with torch.no_grad():
-                output = model(**inputs).waveform
-            path = f"audio_{step.step_id}.wav"
-            scipy.io.wavfile.write(path, rate=model.config.sampling_rate, data=output[0].numpy())
-            step.audio_path = path
+                text_features = model_any.get_text_features(**text_inputs)
+                image_features = model_any.get_image_features(**image_inputs)
 
-        return steps
+            merged = cast(torch.Tensor, (text_features + image_features) / 2.0)
+            embedding = merged[0].cpu().tolist()
+        except Exception:
+            embedding = _deterministic_embedding(summary, size=512)
 
-class LocalAnimation(BasePipeline, AnimationGenerator):
-    def generate(self, steps: list[AssemblyStep]) -> list[AssemblyStep]:
-        # Implement a stub or lightweight Image2Video pipeline
-        for step in steps:
-            step.video_path = f"animation_{step.step_id}.mp4"
-        return steps
+        return EncodedProduct(product_summary=summary, embedding=embedding, attributes=attributes)
 
-#
-# Inference API Implementations
-#
-class APIExtractor(BasePipeline, InstructionExtractor):
-    def extract(self, pdf_path: str) -> list[AssemblyStep]:
-        from huggingface_hub import InferenceClient
-        import fitz
-        
-        client = InferenceClient(model="Salesforce/blip-image-captioning-base", token=self.get_token())
-        
-        doc = fitz.open(pdf_path)
-        steps = []
-        for i, page in enumerate(doc):
-            pix = page.get_pixmap()
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            img_path = f"page_{i}.png"
-            img.save(img_path)
-            
-            try:
-                caption = client.image_to_text(img_path)
-            except Exception as e:
-                caption = "Could not generate caption via API."
-                
-            steps.append(AssemblyStep(
-                step_id=i+1, title=f"Action on Page {i+1}", raw_caption=caption,
-                detailed_instruction=None, source_pages=[i], image_paths=[img_path]
-            ))
-        return steps
 
-class APIWriter(BasePipeline, InstructionWriter):
-    def write(self, steps: list[AssemblyStep]) -> list[AssemblyStep]:
-        from huggingface_hub import InferenceClient
-        # TODO: Replace 'google/flan-t5-base' with your custom fine-tuned model ID
-        client = InferenceClient(model="google/flan-t5-base", token=self.get_token())
-        for step in steps:
-            prompt = f"You are an expert. Explain this: {step.raw_caption}"
-            step.detailed_instruction = client.text_generation(prompt, max_new_tokens=150)
-        return steps
+class HFCopyGenerator(CopyGenerator):
+    """Pipeline 3: profile+product context to slogan/headline/script."""
 
-class APINarration(BasePipeline, NarrationGenerator):
-    def generate(self, steps: list[AssemblyStep]) -> list[AssemblyStep]:
-        from huggingface_hub import InferenceClient
-        client = InferenceClient(model="facebook/mms-tts-eng", token=self.get_token())
-        for step in steps:
-            audio = client.text_to_speech(step.detailed_instruction)
-            path = f"audio_{step.step_id}.wav"
-            with open(path, "wb") as f:
-                f.write(audio)
-            step.audio_path = path
-        return steps
+    def __init__(self, model_id: str | None = None) -> None:
+        # TODO: swap this model id with your fine-tuned marketing copy model hosted on HF Hub.
+        self.model_id = model_id or config.COPY_GENERATION_MODEL_ID
 
-class APIAnimation(BasePipeline, AnimationGenerator):
-    def generate(self, steps: list[AssemblyStep]) -> list[AssemblyStep]:
-        # Typically Stability SVD image-to-video inference
-        return steps
+    def generate(
+        self,
+        profile: CustomerProfile,
+        encoded_profile: EncodedProfile,
+        product: ProductInfo,
+        encoded_product: EncodedProduct,
+    ) -> MarketingAssets:
+        tokenizer, model = _load_text2text_components(self.model_id)
+        prompt = build_copy_prompt(
+            profile_summary=encoded_profile.profile_summary,
+            product=product,
+            product_attributes=encoded_product.attributes,
+        )
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=220,
+                do_sample=True,
+                temperature=0.8,
+            )
+        raw = tokenizer.decode(outputs[0], skip_special_tokens=True) if len(outputs) else ""
+        slogan, headline, script = parse_generated_copy(raw)
+
+        debug = {
+            "model_id": self.model_id,
+            "raw_text_output": raw,
+            "profile_embedding_size": len(encoded_profile.embedding),
+            "product_embedding_size": len(encoded_product.embedding),
+            "profile": asdict(profile),
+        }
+        return MarketingAssets(slogan=slogan, headline=headline, script=script, debug_metadata=debug)
+
+
+class HFVideoGenerator(VideoGenerator):
+    """Pipeline 4: text+image to promotional short video, with robust fallback."""
+
+    def __init__(self, model_id: str | None = None, token: str | None = None) -> None:
+        self.model_id = model_id or config.VIDEO_MODEL_ID
+        self.token = token or config.HF_TOKEN
+
+    @staticmethod
+    def _build_video_prompt(profile: CustomerProfile, product: ProductInfo, assets: MarketingAssets) -> str:
+        city = profile.nationality or "urban city"
+        return (
+            f"A cinematic product ad. A person matching profile gender {profile.gender}, age {profile.age}, "
+            f"walking happily in {city} streets at sunset, wearing {product.name}. "
+            f"Mood energetic and premium. Overlay slogan: {assets.slogan}. "
+            "Camera motion smooth, 3-6 second social ad style."
+        )
+
+    def _try_inference_api(self, prompt: str) -> bytes | None:
+        if not config.USE_HF_INFERENCE_API_FOR_VIDEO or not self.token:
+            return None
+
+        try:
+            client = _load_hf_inference_client(self.model_id, self.token)
+            if hasattr(client, "text_to_video"):
+                result = client.text_to_video(prompt)
+                if isinstance(result, bytes):
+                    return result
+            return None
+        except Exception:
+            return None
+
+    def generate(self, profile: CustomerProfile, product: ProductInfo, assets: MarketingAssets) -> str:
+        prompt = self._build_video_prompt(profile, product, assets)
+        output_stem = sanitize_filename(f"{profile.name}-{product.product_id}-ad")
+
+        video_bytes = self._try_inference_api(prompt)
+        if video_bytes:
+            return save_video_bytes(video_bytes, prefix=output_stem)
+
+        # Streamlit Cloud-safe fallback when inference or local TI2V is unavailable.
+        return create_fallback_banner_video(
+            image_path_or_url=product.image_path_or_url,
+            slogan=assets.slogan,
+            headline=assets.headline,
+            output_stem=output_stem,
+        )

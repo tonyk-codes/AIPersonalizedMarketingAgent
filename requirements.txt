@@ -1,11 +1,10 @@
 streamlit
 transformers
+sentence-transformers
 diffusers
 huggingface_hub
 torch
-pdf2image
-opencv-python-headless
 Pillow
 moviepy
 python-dotenv
-PyMuPDF
+numpy

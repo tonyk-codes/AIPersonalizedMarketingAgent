@@ -1,72 +1,151 @@
-# AI Storyboard and Animation Studio
+# Smart Nike Shoe Ad Studio
 
-AI Storyboard and Animation Studio is a Streamlit-based production workspace for turning a topic brief into a structured creative package. The intended workflow starts with a topic and supporting description, refines that material into scene-level narrative units, prepares storyboard assets for an Excel workbook (分鏡), and ultimately feeds a final animation deliverable with dialogue, sound design, ambience, and music.
+Personalized Nike Shoe Video Ads with Hugging Face multi-modal pipelines.
 
-The current repository ships with mock pipeline components so the end-to-end flow can be exercised without external model providers or media-generation services.
+This Streamlit app generates a personalized Nike-style marketing video experience from a customer profile:
+- Name, Age, Gender, Nationality, Language, Product
+- Optional customer notes
 
-## Workflow Overview
+The UI mimics a Nike online storefront and replaces the hero banner with a generated promotional video when the user clicks Generate Marketing Video.
 
-The application is organized around four production steps:
+## Business Objective
 
-1. Topic Intake
-	Enter a topic plus several sentences of description that define tone, intent, structure, and visual direction.
-2. Narrative Refinement
-	Convert the input brief into clearer scene breakdowns and script-ready planning material.
-3. Storyboard Workbook Preparation
-	Generate storyboard-supporting assets intended for an Excel workbook containing frame descriptions, sketches, and script notes.
-4. Final Animation Delivery
-	Render or package the final animation output, including sound-related layers such as dialogue, effects, ambience, and music.
+Smart Nike Shoe Ad Studio demonstrates how profile-level personalization can be transformed into targeted, product-specific ad creative:
+- The customer profile drives personalization intent.
+- A curated Nike shoe catalog anchors product context.
+- Hugging Face pipelines generate ad copy and video assets.
 
-## Current Implementation Scope
+This project is designed for:
+- ISOM5240 Deep Learning coursework (Hugging Face-only model stack)
+- Portfolio-quality software architecture
+- Future production extensibility
 
-This repository currently provides a professional UI shell and mock backend behavior for the full production flow.
+## Pipeline Architecture
 
-- The refiner mock splits input text into scene-style segments.
-- The storyboard mock returns placeholder sketch/image paths.
-- The animation mock returns a placeholder video path.
-- Excel workbook generation and real audio or animation rendering are not implemented yet.
+Core flow (4 stages):
+1. User Profile Embedding
+2. Product Understanding / Embedding
+3. Personalized Marketing Script and Slogan
+4. Image/Text to Video Generation (with robust fallback banner video)
 
-## Quick Start
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-The application opens in your browser at `http://localhost:8501`.
-
-If you plan to integrate real AI providers, create a `.env` file for the relevant API keys before launching the app.
-
-## Repository Structure
+Logical diagram:
 
 ```text
-app.py                  Streamlit application and UI workflow
-interfaces.py           Abstract interfaces for each pipeline stage
-mock_implementations.py Mock backends for local testing and demos
-config.yaml             Default pipeline configuration
+Customer Profile + Notes
+				|
+				v
+[Pipeline 1] Profile Encoder (Sentence Embeddings)
+				|
+				v
+Selected Nike Product (name/category/image/url)
+				|
+				v
+[Pipeline 2] Product Encoder (CLIP text+image)
+				|
+				v
+[Pipeline 3] Copy Generator (FLAN-T5 or fine-tuned variant)
+				|
+				v
+[Pipeline 4] Video Generator (HF Inference API or fallback video)
+				|
+				v
+Nike-style storefront hero banner video + slogan + script
+```
+
+## Hugging Face Models
+
+Default model ids are configurable in config.py.
+
+- sentence-transformers/all-MiniLM-L6-v2
+	- Role: profile embedding (Pipeline 1)
+	- Link: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+
+- openai/clip-vit-base-patch32
+	- Role: product text+image embedding (Pipeline 2)
+	- Link: https://huggingface.co/openai/clip-vit-base-patch32
+
+- google/flan-t5-base
+	- Role: slogan/headline/script generation (Pipeline 3)
+	- Link: https://huggingface.co/google/flan-t5-base
+
+- Wan-AI/Wan2.2-TI2V-5B-Diffusers
+	- Role: promotional video generation target model (Pipeline 4)
+	- Link: https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B-Diffusers
+
+## Fine-Tuned Model Hook
+
+Pipeline 3 is designed to be replaced by your own fine-tuned marketing model.
+
+Where to plug in:
+- Update COPY_GENERATION_MODEL_ID in config.py
+- Optionally set environment variable COPY_GENERATION_MODEL_ID in .env
+
+Example target model id:
+- my-username/nike-marketing-flan-t5-base
+
+## Project Structure
+
+```text
+app.py                  Streamlit UI and pipeline orchestration
+interfaces.py           Dataclasses, protocols, and stage registries
+hf_pipelines.py         Hugging Face implementations for all 4 stages
+mock_implementations.py Deterministic no-network fallback implementations
+nike_catalog.py         Curated Nike shoe catalog helpers
+media_utils.py          Video/image utility helpers and fallback banner video
+config.py               Model IDs, tokens, feature flags, artifact paths
 requirements.txt        Python dependencies
 ```
 
-## Pipeline Interfaces
+## Run Locally
 
-| Stage | Interface | Purpose |
-|---|---|---|
-| Refiner | `ScriptRefiner` | Converts topic input into structured scene descriptions |
-| Storyboard | `StoryboardGenerator` | Produces sketch or frame assets for storyboard preparation |
-| Animation | `VideoGenerator` | Produces the final animation or preview output |
+1. Install dependencies
 
-## Extending the Pipeline
+```bash
+pip install -r requirements.txt
+```
 
-To integrate real services:
+2. Create .env from .env.example and add Hugging Face token
 
-1. Create a new implementation class that inherits from the appropriate interface in `interfaces.py`.
-2. Register the new class in the corresponding model registry in `app.py`.
-3. Select the implementation from the sidebar in the Streamlit application.
+```bash
+HF_TOKEN=your_huggingface_token_here
+```
 
-## Recommended Next Steps
+3. Launch app
 
-For a production-ready version of this project, the next logical additions are:
+```bash
+streamlit run app.py
+```
 
-1. Export a real Excel storyboard workbook with columns for scene number, script, description, sketch reference, and shot notes.
-2. Replace the storyboard mock with an image or sketch generation backend.
-3. Replace the animation mock with a renderer or orchestration layer for video, voice, sound effects, and music.
+## Streamlit Cloud Notes
+
+This app is optimized for constrained environments:
+- Heavy video generation defaults to Hugging Face Inference API mode when token is available.
+- If token/video inference is unavailable, app falls back to a generated static-banner MP4 so the full flow still works.
+- Cache usage:
+	- @st.cache_data for catalog and deterministic image prep
+	- @st.cache_resource for model/client loaders
+
+## UI Behavior
+
+- Sidebar inputs:
+	- Name, Age, Gender, Nationality, Language, Product, Additional notes
+- Action:
+	- Generate Marketing Video
+- Main panel:
+	- Nike-style storefront layout
+	- Hero banner becomes generated video
+	- Displays personalized slogan, headline, and script
+
+## Limitations
+
+- Real TI2V API behavior can vary by hosted endpoint and account capability.
+- Inference latency depends on model availability and queue time.
+- Current text generation enforces English output for consistency.
+- Catalog is curated demo data, not a live Nike commerce feed.
+
+## Future Work
+
+1. Add multilingual copy generation and language-specific model routing.
+2. Enable optional TTS voice-over and audio-video muxing.
+3. Add A/B ad prompt experimentation and conversion analytics hooks.
+4. Expand product coverage and dynamic catalog ingestion pipeline.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import streamlit as st
+from typing import cast
 
 import config
 from hf_pipelines import HFCopyGenerator, HFProductEncoder, HFProfileEncoder, HFVideoGenerator
@@ -72,6 +73,71 @@ st.markdown(
   padding: 0.65rem;
   background: #101010;
 }
+.preview-shell {
+    border: 1px solid #2f3f2f;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #0a130a;
+}
+.preview-top {
+    background: linear-gradient(180deg, #16351d 0%, #5e8c67 58%, #a6c9ad 100%);
+    padding: 0.9rem;
+}
+.preview-brand {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #f5f8f5;
+    font-size: 0.85rem;
+    letter-spacing: 0.05rem;
+    margin-bottom: 0.7rem;
+}
+.preview-promo {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 10px;
+    margin-bottom: 0.45rem;
+    padding: 0.45rem 0.6rem;
+    color: #f3f7f3;
+    background: rgba(0, 0, 0, 0.22);
+    font-size: 0.85rem;
+}
+.preview-promo b {
+    font-size: 1.1rem;
+}
+.preview-video {
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    background: #000000;
+    padding: 0.55rem;
+}
+.preview-empty {
+    border: 1px dashed #4a6650;
+    border-radius: 10px;
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #c5d8c8;
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 1rem;
+}
+.preview-bottom {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.7rem 0.9rem 0.95rem;
+    background: #0b110c;
+}
+.preview-chip {
+    border: 1px solid #39533f;
+    border-radius: 999px;
+    color: #d7ead9;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.78rem;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -128,7 +194,7 @@ def render_product_tiles(products: list[ProductInfo]) -> None:
     for idx, product in enumerate(products[:3]):
         with cols[idx]:
             image = cached_local_image(product.image_path_or_url, product.name)
-            st.image(image, width="stretch")
+            st.image(image, width=260)
             st.markdown(f"<div class='tile-box'><b>{product.name}</b><br>{product.category}</div>", unsafe_allow_html=True)
 
 
@@ -160,13 +226,16 @@ with st.sidebar:
     st.header("Customer Profile")
     name = st.text_input("Name", value="")
     age = int(st.number_input("Age", min_value=10, max_value=90, value=25, step=1))
-    gender = st.selectbox("Gender", ["Male", "Female", "Non-binary", "Prefer not to say"])
+    gender = cast(str, st.selectbox("Gender", ["Male", "Female", "Non-binary", "Prefer not to say"]))
     nationality = st.text_input("Nationality", help="e.g., Hong Kong, USA, Japan")
-    language = st.selectbox(
-        "Language",
-        ["English", "Traditional Chinese", "Simplified Chinese", "Japanese", "Other"],
+    language = cast(
+        str,
+        st.selectbox(
+            "Language",
+            ["English", "Traditional Chinese", "Simplified Chinese", "Japanese", "Other"],
+        ),
     )
-    selected_product_name = st.selectbox("Product", options=product_names)
+    selected_product_name = cast(str, st.selectbox("Product", options=product_names))
     notes = st.text_area("Additional notes (optional)", value="")
 
     if config.FORCE_MOCK_MODE or not config.HF_TOKEN:
@@ -208,15 +277,9 @@ hero_col, side_col = st.columns([2.6, 1.2], gap="large")
 
 with hero_col:
     st.markdown('<div class="hero-shell">', unsafe_allow_html=True)
-    if st.session_state.get("video_path"):
-        st.video(st.session_state["video_path"])
-    else:
-        if product_names:
-            default_product = get_product_by_name(selected_product_name)
-            hero_image = cached_local_image(default_product.image_path_or_url, default_product.name)
-            st.image(hero_image, caption="Personalized Nike ad will appear here", width="stretch")
-        else:
-            st.info("Personalized Nike ad will appear here")
+    st.markdown("### Campaign Studio")
+    st.write("Use the profile form to generate personalized ad copy and a video for preview.")
+    render_product_tiles(products)
     st.markdown("</div>", unsafe_allow_html=True)
 
     assets: MarketingAssets | None = st.session_state.get("assets")
@@ -228,8 +291,49 @@ with hero_col:
         st.markdown("</div>", unsafe_allow_html=True)
 
 with side_col:
-    st.subheader("Store Highlights")
-    render_product_tiles(products)
+        st.markdown(
+                """
+<div class="preview-shell">
+    <div class="preview-top">
+        <div class="preview-brand">
+            <span>NIKE HONG KONG</span>
+            <span>Online Store</span>
+        </div>
+        <div class="preview-promo">
+            <span>2026.03.10 STARTS</span>
+            <b>Season Offer</b>
+        </div>
+        <div class="preview-promo">
+            <span>Members Exclusive</span>
+            <b>Up To 65% Off</b>
+        </div>
+    </div>
+    <div class="preview-video">
+""",
+                unsafe_allow_html=True,
+        )
+
+        if st.session_state.get("video_path"):
+                st.video(st.session_state["video_path"])
+        else:
+                st.markdown(
+                        '<div class="preview-empty">Generate Marketing Video to replace the hero image with your personalized ad video preview.</div>',
+                        unsafe_allow_html=True,
+                )
+
+        st.markdown(
+                """
+    </div>
+    <div class="preview-bottom">
+        <span class="preview-chip">New In</span>
+        <span class="preview-chip">Shoes</span>
+        <span class="preview-chip">Apparel</span>
+        <span class="preview-chip">Member Days</span>
+    </div>
+</div>
+""",
+                unsafe_allow_html=True,
+        )
 
 profile_state: CustomerProfile | None = st.session_state.get("profile")
 product_state: ProductInfo | None = st.session_state.get("product")

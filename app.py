@@ -8,7 +8,6 @@ from typing import cast
 import config
 from hf_pipelines import HFProductEncoder, HFProfileEncoder, HFScriptGenerator, HFSloganGenerator, HFVideoGenerator
 from interfaces import CustomerProfile, MarketingAssets, ProductInfo
-from media_utils import ensure_local_image
 from mock_implementations import MockProductEncoder, MockProfileEncoder, MockScriptGenerator, MockSloganGenerator, MockVideoGenerator
 from nike_catalog import get_product_by_name, list_products
 
@@ -30,31 +29,6 @@ st.markdown(
 .block-container {
   padding-top: 1.3rem;
   padding-bottom: 2rem;
-}
-.nike-nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: linear-gradient(90deg, #111111, #1a1a1a);
-  border: 1px solid #2c2c2c;
-  border-radius: 12px;
-  padding: 0.8rem 1.2rem;
-  margin-bottom: 0.9rem;
-}
-.nike-brand {
-  letter-spacing: 0.14rem;
-  font-weight: 900;
-  color: #ffffff;
-}
-.nike-menu {
-  color: #d1d1d1;
-  font-size: 0.95rem;
-}
-.hero-shell {
-  border: 1px solid #313131;
-  border-radius: 14px;
-  padding: 0.7rem;
-  background: linear-gradient(180deg, #141414, #090909);
 }
 .copy-card {
   margin-top: 0.8rem;
@@ -83,95 +57,12 @@ st.markdown(
     margin: 0.28rem 0;
     color: #d7d7d7;
 }
-.tile-grid {
-  margin-top: 1rem;
-}
-.tile-box {
-  border: 1px solid #2a2a2a;
-  border-radius: 10px;
-  padding: 0.65rem;
-  background: #101010;
-}
-.preview-shell {
-    border: 1px solid #2f4432;
-    border-radius: 14px;
-    overflow: hidden;
-    background: #0d120d;
-}
-.preview-topbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #080a08;
-    border-bottom: 1px solid #243625;
-    padding: 0.46rem 0.75rem;
-    font-size: 0.66rem;
-    color: #d6dfd6;
-    letter-spacing: 0.06rem;
-}
-.preview-topbar b {
-    color: #ffffff;
-}
-.preview-hero {
-    padding: 0.95rem 0.9rem 0.7rem;
-    background: linear-gradient(180deg, #16361e 0%, #6f9972 52%, #b7d4bc 100%);
-}
-.preview-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    color: #f5f8f5;
-}
-.preview-date {
-    font-size: 0.56rem;
-    line-height: 1.15;
-    letter-spacing: 0.03rem;
-}
-.preview-logo {
-    font-size: 0.8rem;
-    font-style: italic;
-    font-weight: 900;
-    letter-spacing: 0.04rem;
-    transform: skew(-8deg);
-}
-.preview-headline {
-    margin-top: 0.4rem;
-    font-size: 1.5rem;
-    line-height: 0.98;
-    color: #ffffff;
-    letter-spacing: 0.02rem;
-    font-weight: 800;
-    text-shadow: 0 3px 20px rgba(9, 16, 10, 0.45);
-}
-.preview-subline {
-    margin-top: 0.38rem;
-    color: #f4f8f4;
-    font-size: 0.64rem;
-    letter-spacing: 0.01rem;
-    opacity: 0.95;
-}
-.preview-product {
-    border-top: 1px solid rgba(255, 255, 255, 0.14);
-    background: radial-gradient(circle at 14% 10%, #172318, #090f09 72%);
-    padding: 0.62rem;
-}
-.preview-product-caption {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.4rem;
-    color: #f3f8f3;
-    margin-top: 0.4rem;
-    font-size: 0.65rem;
-}
-.preview-video {
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    background: #030603;
-    padding: 0.5rem;
-}
 .preview-empty {
     border: 1px dashed #4d6b52;
     border-radius: 10px;
-    min-height: 175px;
+    width: 100%;
+    min-height: 220px;
+    aspect-ratio: 16 / 9;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -180,144 +71,17 @@ st.markdown(
     text-align: center;
     padding: 0.8rem;
 }
-.preview-bottom {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.45rem;
-    flex-wrap: wrap;
-    padding: 0.65rem;
-    background: #090d09;
+.right-preview [data-testid="stVideo"] {
+    width: 100% !important;
 }
-.preview-chip {
-    border: 1px solid #3b5340;
-    border-radius: 7px;
-    color: #dceddc;
-    padding: 0.32rem 0.44rem;
-    font-size: 0.66rem;
-    text-align: center;
-    background: linear-gradient(180deg, #172219, #111911);
+.right-preview [data-testid="stVideo"] > div {
+    width: 100% !important;
 }
-.nike-page {
-    background: #f5f5f5;
-    color: #111111;
-    border-radius: 16px;
-    overflow: hidden;
-    border: 1px solid #e4e4e4;
-}
-.nike-store-nav {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.85rem 1rem;
-    background: #ffffff;
-    border-bottom: 1px solid #e7e7e7;
-}
-.nike-store-brand {
-    font-weight: 900;
-    letter-spacing: 0.22rem;
-    font-size: 1rem;
-}
-.nike-store-menu {
-    display: flex;
-    gap: 0.9rem;
-    font-size: 0.74rem;
-    color: #242424;
-}
-.nike-store-hero-copy {
-    padding: 1.05rem 1rem 0.9rem;
-    background: linear-gradient(135deg, #101010 0%, #2f2f2f 38%, #5b5b5b 100%);
-    color: #ffffff;
-}
-.nike-store-kicker {
-    font-size: 0.7rem;
-    letter-spacing: 0.12rem;
-    text-transform: uppercase;
-    opacity: 0.85;
-}
-.nike-store-title {
-    margin-top: 0.45rem;
-    font-size: 1.9rem;
-    line-height: 0.98;
-    font-weight: 800;
-}
-.nike-store-description {
-    margin-top: 0.45rem;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    max-width: 26rem;
-    color: #f1f1f1;
-}
-.nike-hero-placeholder {
-    margin: 0 1rem 1rem;
-    border-radius: 14px;
-    min-height: 200px;
-    background: linear-gradient(135deg, #1a1a1a, #474747);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.2rem;
-    text-align: center;
-    color: #ffffff;
-}
-.nike-pipeline-info {
-    margin: 0 1rem 1rem;
-    padding: 0.85rem 0.95rem;
-    border-radius: 12px;
-    background: #ffffff;
-    color: #444444;
-    font-size: 0.78rem;
-    line-height: 1.45;
-    border: 1px solid #ececec;
-}
-.nike-pipeline-info b {
-    color: #111111;
-}
-.nike-products-wrap {
-    padding: 0 1rem 1rem;
-}
-.nike-products-title {
-    color: #111111;
-    font-weight: 700;
-    font-size: 0.88rem;
-    margin-bottom: 0.75rem;
-}
-.nike-product-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-}
-.nike-product-card {
-    background: #ffffff;
-    border: 1px solid #ececec;
-    border-radius: 12px;
-    overflow: hidden;
-}
-.nike-product-card img {
-    width: 100%;
-    height: 132px;
-    object-fit: cover;
+.right-preview [data-testid="stVideo"] video,
+.right-preview [data-testid="stVideo"] iframe {
+    width: 100% !important;
+    height: auto !important;
     display: block;
-    background: #f1f1f1;
-}
-.nike-product-body {
-    padding: 0.7rem;
-}
-.nike-product-name {
-    font-size: 0.74rem;
-    font-weight: 700;
-    color: #111111;
-    line-height: 1.35;
-}
-.nike-product-meta {
-    margin-top: 0.25rem;
-    font-size: 0.68rem;
-    color: #757575;
-}
-.nike-product-price {
-    margin-top: 0.32rem;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: #111111;
 }
 </style>
 """,
@@ -328,11 +92,6 @@ st.markdown(
 @st.cache_data(show_spinner=False)
 def load_catalog() -> list[ProductInfo]:
     return list_products()
-
-
-@st.cache_data(show_spinner=False)
-def cached_local_image(image_path_or_url: str, name: str) -> str:
-    return ensure_local_image(image_path_or_url, name_hint=name)
 
 
 def init_state() -> None:
@@ -364,87 +123,22 @@ def validate_name(name: str) -> bool:
     return bool(name and name.strip())
 
 
-def render_nav_bar() -> None:
-    st.markdown(
-        """
-<div class="nike-nav">
-  <div class="nike-brand">NIKE</div>
-  <div class="nike-menu">Men | Women | Kids | Collections | Sale</div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-
-def render_product_tiles(products: list[ProductInfo]) -> None:
-    st.markdown('<div class="tile-grid"></div>', unsafe_allow_html=True)
-    cols = st.columns(3)
-    for idx, product in enumerate(products[:3]):
-        with cols[idx]:
-            image = cached_local_image(product.image_path_or_url, product.name)
-            st.image(image, width=260)
-            st.markdown(f"<div class='tile-box'><b>{product.name}</b><br>{product.category}</div>", unsafe_allow_html=True)
-
-
-def build_price_placeholder(product: ProductInfo) -> str:
-    base_prices = {
-        "Running": 899,
-        "Lifestyle": 799,
-        "Basketball": 999,
-        "Training": 879,
-    }
-    amount = base_prices.get(product.category, 859)
-    return f"HK${amount}"
-
-
 def render_nike_preview_page(
     video_path: str | None,
-    assets: MarketingAssets | None,
-    profile: CustomerProfile | None,
-    product: ProductInfo | None,
 ) -> None:
-    slogan = assets.slogan if assets else "Move in your own way"
-    headline = assets.headline if assets else "Profile-aware creative, generated through multi-stage machine learning pipelines."
-    customer_name = profile.name if profile else "your customer"
-    selected_label = product.name if product else "selected Nike shoe"
-
-    st.markdown(
-        f"""
-<div class="nike-page">
-    <div class="nike-store-hero-copy">
-        <div class="nike-store-title">{slogan}</div>
-        <div class="nike-store-description">{headline} Built for {customer_name} and centered on {selected_label}.</div>
-    </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
     if video_path:
         st.video(video_path)
     else:
         st.markdown(
             """
-<div class="nike-hero-placeholder">
+<div class="preview-empty">
     <div>
-        <h3>Your personalized Nike shoe ad will appear here.</h3>
-        <p>Fill in your profile on the left, choose a shoe, and generate a cinematic 480p front-page banner.</p>
+        <h3>Your generated marketing video will appear here.</h3>
     </div>
 </div>
 """,
             unsafe_allow_html=True,
         )
-
-    st.markdown(
-        """
-<div class="nike-page" style="margin-top:-0.2rem; border-top-left-radius:0; border-top-right-radius:0;">
-    <div class="nike-pipeline-info">
-        <b>Pipeline:</b> profile embedding -&gt; product embedding -&gt; personalized slogan (Flan-T5) -&gt; personalized script (Flan-T5) -&gt; cinematic 480p video (Wan TI2V) -&gt; final frame with slogan and customer name.
-    </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
 
 
 PIPELINE_STEPS = [
@@ -560,32 +254,30 @@ if generate_clicked:
         st.session_state["assets"] = assets
         st.session_state["video_path"] = assets.video_path
 
-render_nav_bar()
+assets: MarketingAssets | None = st.session_state.get("assets")
 
-hero_col, side_col = st.columns([2.6, 1.2], gap="large")
+if assets:
+    hero_col, side_col = st.columns([2.6, 1.2], gap="large")
 
-with hero_col:
-    st.markdown('<div class="hero-shell">', unsafe_allow_html=True)
-    st.markdown("### Campaign Studio")
-    st.write("Use the profile form to generate personalized ad copy and a video for preview.")
-    render_product_tiles(products)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    assets: MarketingAssets | None = st.session_state.get("assets")
-    if assets:
+    with hero_col:
         st.markdown('<div class="copy-card">', unsafe_allow_html=True)
         st.markdown(f"<div class='copy-headline'>{assets.slogan}</div>", unsafe_allow_html=True)
         st.markdown(f"**{assets.headline}**")
         st.write(assets.script)
         st.markdown("</div>", unsafe_allow_html=True)
 
-with side_col:
+    with side_col:
+        st.markdown('<div class="right-preview">', unsafe_allow_html=True)
+        render_nike_preview_page(
+            video_path=cast(str | None, st.session_state.get("video_path")),
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+else:
+    st.markdown('<div class="right-preview">', unsafe_allow_html=True)
     render_nike_preview_page(
         video_path=cast(str | None, st.session_state.get("video_path")),
-        assets=cast(MarketingAssets | None, st.session_state.get("assets")),
-        profile=cast(CustomerProfile | None, st.session_state.get("profile")),
-        product=cast(ProductInfo | None, st.session_state.get("product")),
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 profile_state: CustomerProfile | None = st.session_state.get("profile")
 product_state: ProductInfo | None = st.session_state.get("product")

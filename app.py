@@ -42,6 +42,31 @@ st.markdown(
     --owid-bg: #f2f4f7;
     --owid-text: #223145;
     --owid-border: #d8dee7;
+    --owid-top-border: #0e2c50;
+    --owid-card-bg: #ffffff;
+    --owid-table-border: #ecf0f5;
+    --owid-heading: #163555;
+    --owid-note-bg: #fff7f4;
+    --owid-sidebar-bg: #f6f8fb;
+    --owid-sidebar-border: #dbe3ed;
+}
+
+:root[data-theme="dark"],
+html[data-theme="dark"],
+body[data-theme="dark"],
+.stApp[data-theme="dark"] {
+    --owid-blue: #13375f;
+    --owid-blue-2: #1f4f80;
+    --owid-bg: #0e1117;
+    --owid-text: #e6edf3;
+    --owid-border: #314055;
+    --owid-top-border: #325b89;
+    --owid-card-bg: #1a2330;
+    --owid-table-border: #2b3a4e;
+    --owid-heading: #dce8f8;
+    --owid-note-bg: #2a2022;
+    --owid-sidebar-bg: #161c26;
+    --owid-sidebar-border: #2d3a4d;
 }
 
 .stApp {
@@ -59,7 +84,7 @@ st.markdown(
 }
 
 .top-header {
-    border: 1px solid #0e2c50;
+    border: 1px solid var(--owid-top-border);
     background: linear-gradient(90deg, var(--owid-blue), var(--owid-blue-2));
     border-radius: 8px;
     color: #f8fbff;
@@ -83,7 +108,7 @@ st.markdown(
 .pipeline-grid {
     border: 1px solid var(--owid-border);
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--owid-card-bg);
     margin-bottom: 1rem;
     padding: 0.8rem 0.9rem;
 }
@@ -94,35 +119,35 @@ st.markdown(
 }
 
 .pipeline-grid th, .pipeline-grid td {
-    border-bottom: 1px solid #ecf0f5;
+    border-bottom: 1px solid var(--owid-table-border);
     padding: 0.55rem 0.45rem;
     font-size: 0.9rem;
 }
 
 .pipeline-grid th {
     text-align: left;
-    color: #163555;
+    color: var(--owid-heading);
     font-weight: 700;
 }
 
 .result-card {
     border: 1px solid var(--owid-border);
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--owid-card-bg);
     margin-bottom: 0.9rem;
     padding: 1rem;
 }
 
 .result-card h3 {
     margin: 0 0 0.5rem 0;
-    color: #163555;
+    color: var(--owid-heading);
     font-size: 1.06rem;
 }
 
 .info-note {
     border-left: 4px solid var(--owid-red);
     padding: 0.55rem 0.8rem;
-    background: #fff7f4;
+    background: var(--owid-note-bg);
     margin-bottom: 1rem;
     font-size: 0.88rem;
 }
@@ -143,8 +168,8 @@ st.markdown(
 }
 
 [data-testid="stSidebar"] {
-    background: #f6f8fb;
-    border-right: 1px solid #dbe3ed;
+    background: var(--owid-sidebar-bg);
+    border-right: 1px solid var(--owid-sidebar-border);
 }
 
 @media (max-width: 900px) {

@@ -113,21 +113,35 @@ def generate_images(customer: Customer, product: Product, story: str) -> list[st
     
     for i in range(1, 4):
         p = IMAGES_DIR / f"{base_name}_scene_{i}.png"
+        
+        # We can dynamically adjust the prompt based on the scene number
+        # to ensure it visualizes different parts of the story
+        if i == 1:
+            scene_desc = "Establishing wide cinematic shot. "
+        elif i == 2:
+            scene_desc = "Action-packed dynamic close-up shot. "
+        else:
+            scene_desc = "Heroic low-angle final shot. "
+
+        scene_prompt = f"{scene_desc} {story}. Wearing {product.name}."
+        
         try:
             client = _hf_client(IMAGE_MODEL)
             if client:
                 # Triggers diffusion model.
-                img = client.text_to_image(f"{prompt} (Scene {i})")
+                img = client.text_to_image(scene_prompt)
                 img.save(p)
                 paths.append(str(p))
                 continue
         except Exception as e:
             print(f"Image generation error: {e}")
+            st.warning(f"Failed to generate Scene {i} image with AI model: {e}. Falling back to default image.")
         
         # Mock fallback: create a robust blank image that satisfies downstream rendering
         img = Image.new("RGB", (854, 480), color=(30*i, 30, 80))
         d = ImageDraw.Draw(img)
-        d.text((50, 200), f"Scene {i}: {story[:50]}...", fill="white")
+        # Avoid just placing the raw text, instead represent it visually or note the failure
+        d.text((50, 200), f"Scene {i} (Mock Visual): {scene_desc}", fill="white")
         img.save(p)
         paths.append(str(p))
 

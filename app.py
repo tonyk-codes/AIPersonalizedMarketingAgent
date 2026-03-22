@@ -30,7 +30,7 @@ for path in (VIDEOS_DIR, IMAGES_DIR):
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 SLOGAN_MODEL = os.getenv("SLOGAN_GENERATION_MODEL_ID", "Qwen/Qwen3.5-2B")
 STORY_MODEL = os.getenv("SCRIPT_GENERATION_MODEL_ID", "Qwen/Qwen3.5-2B")
-IMAGE_MODEL = os.getenv("SCENE_IMAGE_MODEL_ID", "F16/z-image-turbo-sda")
+IMAGE_MODEL = os.getenv("SCENE_IMAGE_MODEL_ID", "Tongyi-MAI/Z-Image-Turbo")
 
 # Configure the Streamlit page layout and title
 st.set_page_config(page_title="AI Smart Marketing", layout="wide")

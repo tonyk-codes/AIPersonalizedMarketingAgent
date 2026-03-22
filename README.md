@@ -73,7 +73,7 @@ Default model ids are configurable via `.env`.
 	- Role: personalized storyline generation (Pipeline 2)
 	- Target format: Text Generation
 
-- F16/z-image-turbo-sda
+- Tongyi-MAI/Z-Image-Turbo
 	- Role: storyline scene generation (Pipeline 3)
 	- Target format: Text-to-Image Generation
 
@@ -86,8 +86,8 @@ Default model ids are configurable via `.env`.
 Pipelines 1 and 2 are designed to be replaced by your own fine-tuned marketing models.
 
 Where to plug in:
-- Update SLOGAN_GENERATION_MODEL_ID and SCRIPT_GENERATION_MODEL_ID at the top of `app.py`
-- Or securely set environment variables SLOGAN_GENERATION_MODEL_ID and SCRIPT_GENERATION_MODEL_ID in `.env`
+- Update SLOGAN_GENERATION_MODEL_ID, SCRIPT_GENERATION_MODEL_ID, and SCENE_IMAGE_MODEL_ID at the top of `app.py`
+- Or securely set environment variables SLOGAN_GENERATION_MODEL_ID, SCRIPT_GENERATION_MODEL_ID, and SCENE_IMAGE_MODEL_ID in `.env`
 
 Example target model id:
 - my-username/nike-marketing-flan-t5-base

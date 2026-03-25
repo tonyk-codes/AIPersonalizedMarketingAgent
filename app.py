@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import numpy as np
 import streamlit as st
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
@@ -27,11 +26,11 @@ ICON_DIR = ASSETS_DIR / "icon"
 for path in (VIDEOS_DIR, IMAGES_DIR):
     path.mkdir(parents=True, exist_ok=True)
 
-# Application state and configuration. Reads from environment variables.
+# Application state and fixed model configuration.
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-SLOGAN_MODEL = os.getenv("SLOGAN_GENERATION_MODEL_ID", "erichflam-hkust/Qwen2.5-VL-7B-Instruct-NIKE-Finetuned")
-SCRIPT_MODEL = os.getenv("SCRIPT_GENERATION_MODEL_ID", "Qwen/Qwen3.5-122B-A10B")
-VIDEO_MODEL = os.getenv("VIDEO_GENERATION_MODEL_ID", "Wan-AI/Wan2.2-TI2V-5B")
+SLOGAN_MODEL = "erichflam-hkust/Qwen2.5-VL-7B-Instruct-NIKE-Finetuned"
+SCRIPT_MODEL = "Qwen/Qwen3.5-122B-A10B"
+VIDEO_MODEL = "Wan-AI/Wan2.2-TI2V-5B"
 
 # Load model directly via transformers (Pipeline 1)
 try:
@@ -105,11 +104,8 @@ CATALOG = [
 ]
 
 # =========================================================
-# 3) AI Generators (Hugging Face / Mock fallback)
+# 3) AI Generators
 # =========================================================
-# Connects to HuggingFace Inference API securely using tokens
-def _hf_client(model: str) -> InferenceClient | None:
-    return InferenceClient(model=model, token=HF_TOKEN) if HF_TOKEN else None
 
 
 def normalize_video_output(output):
@@ -199,24 +195,32 @@ def _run_pipeline2_text(messages: list[dict], max_new_tokens: int) -> str:
         print(f"Pipeline 2 generation error: {e}")
         return ""
 
-def generate_slogan_and_description(customer: Customer, product: Product, slogan_theme: str) -> tuple[str, str]:
+def generate_slogan_and_description(
+    customer: Customer,
+    product: Product,
+    negative_prompt: str,
+    video_duration: int,
+) -> tuple[str, str]:
     """
     Generates a personalized slogan and product description based on customer profile,
-    slogan theme, and product type using LLMs.
+    product type, and generation config.
     
     Args:
         customer: Customer profile (name, age, gender, nationality)
         product: Product info (name, shoe_type)
-        slogan_theme: Theme for slogan (resilience, courage, discipline, perseverance)
+        negative_prompt: Elements to avoid in downstream video output
+        video_duration: Duration of generated video in seconds
     
     Returns:
         Tuple of (slogan, product_description)
     """
-    # Slogan generation with theme
+    # Slogan generation
     slogan_prompt = (
         f"Write a short, engaging Nike slogan (max 10 words) for a {customer.age}yo {customer.nationality} {customer.gender} "
         f"named {customer.name} buying {product.name} ({product.shoe_type}). "
-        f"Theme: {slogan_theme}. Make it motivational and empowering. "
+        f"The slogan should fit a {video_duration}-second high-energy ad concept. "
+        f"Avoid concepts related to: {negative_prompt}. "
+        f"Make it motivational and empowering. "
         f"DO NOT include the customer's name in the slogan itself."
     )
     slogan = ""
@@ -230,15 +234,17 @@ def generate_slogan_and_description(customer: Customer, product: Product, slogan
             slogan = res
     except Exception as e:
         print(f"Slogan generation error: {e}")
-    
+
     if not slogan:
-        slogan = f"Push beyond limits in {product.shoe_type.lower()}."
+        raise RuntimeError(f"Pipeline 1 failed to generate slogan using model {SLOGAN_MODEL}.")
 
     # Product description generation
     description_prompt = (
         f"Write a compelling 2-sentence product description for {product.name} ({product.shoe_type}) "
         f"targeting a {customer.age}yo {customer.nationality} {customer.gender}. "
-        f"Focus on performance, design, and how it embodies {slogan_theme}. Be vivid and marketing-focused."
+        f"Focus on performance and design. "
+        f"The copy should match a {video_duration}-second cinematic ad and avoid: {negative_prompt}. "
+        f"Be vivid and marketing-focused."
     )
     description = ""
     try:
@@ -246,19 +252,24 @@ def generate_slogan_and_description(customer: Customer, product: Product, slogan
         res = _run_pipeline1_text(messages, max_new_tokens=100)
         if not res:
             res = _run_pipeline1_text([{"role": "user", "content": description_prompt}], max_new_tokens=100)
-            if res:
-                description = res
+        if res:
+            description = res
     except Exception as e:
         print(f"Product description generation error: {e}")
-    
+
     if not description:
-        description = f"Experience ultimate performance with {product.name}. Engineered for athletes who embody {slogan_theme.lower()}."
+        raise RuntimeError(f"Pipeline 1 failed to generate product description using model {SLOGAN_MODEL}.")
 
     return slogan, description
 
 
-def generate_cinematic_script(customer: Customer, product: Product, product_description: str, 
-                             slogan_theme: str, negative_prompt: str, video_duration: int) -> str:
+def generate_cinematic_script(
+    customer: Customer,
+    product: Product,
+    product_description: str,
+    negative_prompt: str,
+    video_duration: int,
+) -> str:
     """
     Generates a detailed cinematic script for video generation using the reference prompt structure.
     
@@ -266,7 +277,6 @@ def generate_cinematic_script(customer: Customer, product: Product, product_desc
         customer: Customer profile
         product: Product info with shoe_type
         product_description: Description from Pipeline 1
-        slogan_theme: Theme for cinematic tone
         negative_prompt: Elements to avoid in video
         video_duration: Duration of video in seconds
     
@@ -293,7 +303,7 @@ Essential requirements:
 - Emphasize visible Swoosh branding on clothing and billboards
 - High-energy athletic motion and dynamic action
 - Futuristic neon city aesthetics with golden hour sunset lighting
-- Motivational and empowering atmosphere that reflects {slogan_theme.lower()} theme
+- Motivational and empowering atmosphere tailored to the customer profile
 - {product.shoe_type} in prominent focus throughout the video
 - Video duration: {video_duration} seconds
 - Avoid: {negative_prompt}
@@ -309,7 +319,7 @@ Product: {product.name}
 Type: {product.shoe_type}
 Description: {product_description}
 Target: {customer.age}yo {customer.gender} from {customer.nationality}
-Theme: {slogan_theme}
+Negative constraints: {negative_prompt}
 
 Generate the cinematic script now."""
 
@@ -333,15 +343,9 @@ Generate the cinematic script now."""
             script = res
     except Exception as e:
         print(f"Cinematic script generation error: {e}")
-    
+
     if not script:
-        script = f"""[Subject / Hero Shot]: {customer.name}, a dynamic {customer.age}yo {customer.gender}, in {product.name} shoes mid-stride.
-[Scene & Environment]: Futuristic neon-lit urban landscape at golden hour sunset.
-[Motion & Dynamics]: Explosive athletic movement, parkour-inspired flow, powerful jump sequence.
-[Camera & Cinematography]: Tracking pan, low-angle orbiting crane shot, ARRI Alexa 65 cinematography.
-[Lighting & Mood]: Volumetric god rays, anamorphic lenses, energetic neon ambient lighting.
-[Personalization Layer]: Tailored for {customer.nationality} demographic, emphasizing {slogan_theme} spirit.
-[Style & Quality Boosters]: Premium cinematic quality, slow-motion bursts, lens flares, visible Swoosh branding."""
+        raise RuntimeError(f"Pipeline 2 failed to generate cinematic script using model {SCRIPT_MODEL}.")
 
     return script
 
@@ -543,11 +547,6 @@ def main():
         nationality = st.selectbox("Nationality", ["USA", "Chinese"])
         
         st.header("Generation Config")
-        slogan_theme = st.selectbox(
-            "Slogan Theme",
-            options=["resilience", "courage", "discipline", "perseverance"],
-            index=0
-        )
         
         video_duration = st.slider(
             "Video Duration (seconds)",
@@ -574,9 +573,12 @@ def main():
         else:
             st.info(f"No image found for {selected_product.name}")
         
-        # Display explicit warnings to make app evaluation seamless for assessors
-        if not HF_TOKEN:
-            st.warning("No Hugging Face token found. Running in localized MOCK mode.")
+        if not pipeline1_model or not pipeline1_processor:
+            st.warning(f"Pipeline 1 model could not be loaded: {SLOGAN_MODEL}")
+        if not pipeline2_model or not pipeline2_processor:
+            st.warning(f"Pipeline 2 model could not be loaded: {SCRIPT_MODEL}")
+        if not pipeline3_video_model:
+            st.warning(f"Pipeline 3 model could not be loaded: {VIDEO_MODEL}")
             
         generate_btn = st.button("Generate Assets", type="primary", use_container_width=True)
 
@@ -588,22 +590,43 @@ def main():
         prog = st.progress(0, "Initiating pipeline...")
         
         # Phase 1: Retrieve marketing text (Slogan + Product Description)
-        slogan, product_description = generate_slogan_and_description(customer, product, slogan_theme)
+        try:
+            slogan, product_description = generate_slogan_and_description(
+                customer,
+                product,
+                negative_prompt,
+                video_duration,
+            )
+        except Exception as e:
+            st.error(str(e))
+            st.stop()
+
         prog.progress(25, "Pipeline 1: Slogan & Product Description generated!")
         st.write("**Pipeline 1 (Slogan & Product Description):**")
+        st.caption(f"Model used: {SLOGAN_MODEL}")
         st.success(f"**Slogan:** {slogan}\n\n**Description:** {product_description}")
         
         # Phase 2: Generate cinematic script for video
         st.write("**Pipeline 2 (Cinematic Script Generation):**")
-        cinematic_script = generate_cinematic_script(
-            customer, product, product_description, 
-            slogan_theme, negative_prompt, video_duration
-        )
+        try:
+            cinematic_script = generate_cinematic_script(
+                customer,
+                product,
+                product_description,
+                negative_prompt,
+                video_duration,
+            )
+        except Exception as e:
+            st.error(str(e))
+            st.stop()
+
+        st.caption(f"Model used: {SCRIPT_MODEL}")
         st.info(cinematic_script)
         prog.progress(50, "Pipeline 2: Cinematic script generated!")
         
         # Phase 3: Generate video with product image and slogan overlay
         st.write("**Pipeline 3 (Video Generation with Slogan Overlay):**")
+        st.caption(f"Model used: {VIDEO_MODEL}")
         product_image_path = get_product_image(product)
         
         with st.spinner(f"Generating {video_duration}s video with slogan overlay..."):

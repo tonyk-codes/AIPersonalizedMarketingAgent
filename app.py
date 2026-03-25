@@ -207,8 +207,8 @@ You are an expert copywriter. Write a short, natural-sounding ad sentence for a 
 
 CRITICAL INSTRUCTIONS:
 - Write in normal English with regular spaces between words.
-- Maximum 10 words total.
-- Do NOT include labels like "Slogan:" or quotes.
+- Maximum 9 words total.
+- Do NOT include labels like "Slogan:" , "—", or quotes.
 - Do NOT use the words "Nike", "Just do it", or specific model names.
 - The text must end exactly with: , {customer.name} (with no period at the end).
 
@@ -281,6 +281,7 @@ def generate_cinematic_script(
     system_prompt = f"""
 You are an elite image-to-video prompt engineer for premium sports ads.
 Write one complete, production-ready prompt for a video model. Finish every section cleanly.
+
 Use this exact structure and no other text:
 [Subject / Hero Shot]:
 [Scene & Environment]:

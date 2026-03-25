@@ -1,4 +1,5 @@
 streamlit
+fal-client
 huggingface_hub
 transformers
 torch

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import streamlit as st
+import fal_client as fal
 from dotenv import load_dotenv
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
@@ -30,8 +31,8 @@ for path in (VIDEOS_DIR, IMAGES_DIR):
     path.mkdir(parents=True, exist_ok=True)
 
 
-def _read_hf_token_from_streamlit_secrets_file() -> str:
-    """Read HF_TOKEN from .streamlit/secrets.toml without extra dependencies."""
+def _read_secret_from_streamlit_secrets_file(secret_key: str) -> str:
+    """Read a single secret from .streamlit/secrets.toml without extra dependencies."""
     secrets_path = BASE_DIR / ".streamlit" / "secrets.toml"
     if not secrets_path.exists():
         return ""
@@ -42,7 +43,7 @@ def _read_hf_token_from_streamlit_secrets_file() -> str:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.split("=", 1)
-            if key.strip() == "HF_TOKEN":
+            if key.strip() == secret_key:
                 return value.strip().strip('"').strip("'")
     except Exception as e:
         print(f"Failed reading .streamlit/secrets.toml: {type(e).__name__}: {e}")
@@ -59,7 +60,7 @@ except Exception:
 
 # Fallback: read .streamlit/secrets.toml directly.
 if not HF_TOKEN:
-    HF_TOKEN = _read_hf_token_from_streamlit_secrets_file()
+    HF_TOKEN = _read_secret_from_streamlit_secrets_file("HF_TOKEN")
 
 # Fallback to .env / shell environment for local runs.
 if not HF_TOKEN:
@@ -70,15 +71,32 @@ if HF_TOKEN:
     os.environ["HF_TOKEN"] = HF_TOKEN
     os.environ["HUGGINGFACEHUB_API_TOKEN"] = HF_TOKEN
 
+FAL_KEY = ""
+try:
+    FAL_KEY = str(st.secrets.get("FAL_KEY", "")).strip()
+except Exception:
+    FAL_KEY = ""
+
+if not FAL_KEY:
+    FAL_KEY = _read_secret_from_streamlit_secrets_file("FAL_KEY")
+
+if FAL_KEY:
+    os.environ["FAL_KEY"] = FAL_KEY
+
 SLOGAN_MODEL = "erichflam-hkust/Qwen2.5-VL-7B-Instruct-bnb-4bit-NIKE-Finetuned"
-SCRIPT_MODEL = "Qwen/Qwen3.5-122B-A10B"
-VIDEO_MODEL = "Wan-AI/Wan2.2-TI2V-5B"
+SCRIPT_MODEL = "zai-org/GLM-4.7-Flash:novita"
+VIDEO_MODEL = "fal-ai/ltx-2.3/image-to-video/fast"
 
 PIPELINE1_LOAD_ERROR = ""
 PIPELINE1_LAST_ERROR = ""
 PIPELINE1_BACKEND = ""
 PIPELINE1_API_ERROR = ""
 PIPELINE1_MODEL_USED = ""
+PIPELINE1_INITIALIZED = False
+
+pipeline1_pipe = None
+pipeline1_processor = None
+pipeline1_model = None
 
 
 def _set_pipeline1_error(message: str):
@@ -104,6 +122,11 @@ def _set_pipeline1_api_error(message: str):
 def _set_pipeline1_model_used(model: str):
     global PIPELINE1_MODEL_USED
     PIPELINE1_MODEL_USED = model
+
+
+def _set_pipeline1_initialized(initialized: bool):
+    global PIPELINE1_INITIALIZED
+    PIPELINE1_INITIALIZED = initialized
 
 @st.cache_resource(show_spinner=False)
 def load_slogan_model(token: str):
@@ -150,12 +173,18 @@ def load_slogan_model(token: str):
         }
 
 
-pipeline1_bundle = load_slogan_model(HF_TOKEN)
-pipeline1_pipe = pipeline1_bundle["pipe"]
-pipeline1_processor = pipeline1_bundle["processor"]
-pipeline1_model = pipeline1_bundle["model"]
-_set_pipeline1_backend(pipeline1_bundle.get("backend", ""))
-_set_pipeline1_load_error(pipeline1_bundle.get("load_error", ""))
+def _ensure_pipeline1_loaded():
+    global pipeline1_pipe, pipeline1_processor, pipeline1_model
+    if PIPELINE1_INITIALIZED:
+        return
+
+    pipeline1_bundle = load_slogan_model(HF_TOKEN)
+    pipeline1_pipe = pipeline1_bundle["pipe"]
+    pipeline1_processor = pipeline1_bundle["processor"]
+    pipeline1_model = pipeline1_bundle["model"]
+    _set_pipeline1_backend(pipeline1_bundle.get("backend", ""))
+    _set_pipeline1_load_error(pipeline1_bundle.get("load_error", ""))
+    _set_pipeline1_initialized(True)
 
 # Configure the Streamlit page layout and title with Nike icon
 try:
@@ -219,6 +248,21 @@ def normalize_video_output(output):
 
     # Dict handling
     if isinstance(output, dict):
+        # Nested `data` payload used by fal responses
+        data_payload = output.get("data")
+        if isinstance(data_payload, dict):
+            for k in ["url", "video_url", "file", "path"]:
+                v = data_payload.get(k)
+                if isinstance(v, str) and v:
+                    return v
+
+            nested_video = data_payload.get("video")
+            if isinstance(nested_video, dict):
+                for k in ["url", "video_url"]:
+                    v = nested_video.get(k)
+                    if isinstance(v, str) and v:
+                        return v
+
         # Top-level URLs
         for k in ["url", "video_url", "file", "path"]:
             v = output.get(k)
@@ -235,6 +279,15 @@ def normalize_video_output(output):
                         return v
 
     return None
+
+
+def _is_video_source_playable(video_source: str | None) -> bool:
+    """Validate whether a video source is playable by Streamlit."""
+    if not video_source:
+        return False
+    if video_source.startswith("http://") or video_source.startswith("https://"):
+        return True
+    return Path(video_source).exists()
 
 
 def _normalize_messages_for_chat_api(messages: list[dict]) -> list[dict]:
@@ -391,7 +444,7 @@ def _extract_text_from_text_generation_output(output) -> str:
 
 
 def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str) -> str:
-    """Run text generation using Hugging Face InferenceClient chat API only."""
+    """Run text generation using Hugging Face InferenceClient chat API in stream mode."""
     if not HF_TOKEN:
         _set_pipeline1_api_error("HF_TOKEN is not set.")
         print("HF_TOKEN is not set. Inference will fail.")
@@ -400,22 +453,36 @@ def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str
     normalized_messages = _normalize_messages_for_chat_api(messages)
     _set_pipeline1_api_error("")
 
-    # Single path: InferenceClient chat completions.
+    # Single path: InferenceClient streaming chat completions.
     try:
         client = InferenceClient(api_key=HF_TOKEN)
-        completion = client.chat.completions.create(
+        stream = client.chat.completions.create(
             model=model,
             messages=normalized_messages,
             max_tokens=max_new_tokens,
             temperature=0.7,
+            stream=True,
         )
-        choices = getattr(completion, "choices", None)
-        if choices and len(choices) > 0:
-            message = getattr(choices[0], "message", None)
-            if message is not None:
-                text = _extract_text_from_chat_content(getattr(message, "content", ""))
-                if text:
-                    return text
+
+        chunks: list[str] = []
+        for chunk in stream:
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            if delta is None:
+                continue
+            content = getattr(delta, "content", None)
+            if isinstance(content, str) and content:
+                chunks.append(content)
+            elif content:
+                extracted = _extract_text_from_chat_content(content)
+                if extracted:
+                    chunks.append(extracted)
+
+        text = "".join(chunks).strip()
+        if text:
+            return text
         _set_pipeline1_api_error(f"InferenceClient chat returned no usable text for model {model}.")
         return ""
     except Exception as e:
@@ -426,6 +493,8 @@ def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str
 
 def _run_pipeline1_text(messages: list[dict], max_new_tokens: int) -> str:
     """Run Pipeline 1 model with transformers image-text-to-text pipeline."""
+    _ensure_pipeline1_loaded()
+
     if PIPELINE1_BACKEND != "transformers_pipeline" or pipeline1_pipe is None:
         _set_pipeline1_error(PIPELINE1_LOAD_ERROR or "Pipeline 1 backend is not loaded.")
         print(PIPELINE1_LAST_ERROR)
@@ -656,62 +725,53 @@ def generate_video(product_image_path: str | None, cinematic_script: str, slogan
     Returns:
         Path to generated video file
     """
-    vid_path = VIDEOS_DIR / f"{customer.name}_{product.id}_ad.mp4"
-    frames = []
-    
     if not product_image_path or not Path(product_image_path).exists():
         raise RuntimeError(
             f"Pipeline 3 failed: product image not found for {product.name}."
         )
 
+    if not FAL_KEY:
+        raise RuntimeError("Pipeline 3 failed: FAL_KEY is missing in Streamlit secrets.")
+
     try:
-        product_img = Image.open(product_image_path).convert("RGB").resize((854, 480))
+        image_url = fal.upload_file(product_image_path)
     except Exception as e:
-        raise RuntimeError(
-            f"Pipeline 3 failed: unable to load product image {product_image_path}: {type(e).__name__}: {e}"
-        ) from e
-    
-    # Create main video frames from product image
-    # Calculate frames based on 10 fps and desired duration
-    frame_count = video_duration * 10
-    for _ in range(frame_count):
-        frames.append(np.array(product_img))
-    
-    # Generate the conclusive end card frames displaying the slogan
-    end_img = Image.new("RGB", (854, 480), color=(10, 10, 10))
-    d = ImageDraw.Draw(end_img)
-    
-    # Create a visually appealing slogan card with Nike branding
+        raise RuntimeError(f"Pipeline 3 failed uploading image to fal.ai storage: {type(e).__name__}: {e}") from e
+
+    video_prompt = (
+        f"{cinematic_script}\n"
+        f"Integrate this closing brand line naturally in the final beat: {slogan}.\n"
+        f"Target duration: {video_duration} seconds."
+    )
+
+    def _on_queue_update(update):
+        try:
+            if isinstance(update, dict) and update.get("status") == "IN_PROGRESS":
+                for log in update.get("logs", []):
+                    message = log.get("message") if isinstance(log, dict) else None
+                    if message:
+                        print(f"Pipeline 3 queue: {message}")
+        except Exception:
+            pass
+
     try:
-        font_slogan = ImageFont.truetype("arial.ttf", 42)
-        font_brand = ImageFont.truetype("arial.ttf", 24)
-    except:
-        font_slogan = ImageFont.load_default()
-        font_brand = ImageFont.load_default()
-    
-    # Add Nike branding and slogan
-    d.text((50, 100), "JUST DO IT", fill=(200, 0, 0), font=font_brand)
-    
-    # Wrap and center slogan text
-    slogan_text = slogan[:80]
-    wrapped_slogan = textwrap.fill(slogan_text, width=20)
-    d.text((50, 200), wrapped_slogan, fill="white", font=font_slogan)
-    
-    # Add product name at bottom
-    d.text((50, 400), product.name, fill=(150, 150, 150), font=font_brand)
-    
-    # Add slogan frames at the end (3 seconds at 10 fps = 30 frames)
-    for _ in range(30):
-        frames.append(np.array(end_img))
-    
-    # Process sequence and convert to MP4
-    try:
-        clip = ImageSequenceClip(frames, fps=10)
-        clip.write_videofile(str(vid_path), codec="libx264", audio=False, preset="ultrafast", logger=None, verbose=False)
+        result = fal.subscribe(
+            VIDEO_MODEL,
+            arguments={
+                "image_url": image_url,
+                "prompt": video_prompt,
+            },
+            with_logs=True,
+            on_queue_update=_on_queue_update,
+        )
     except Exception as e:
-        raise RuntimeError(f"Pipeline 3 failed during video encoding: {type(e).__name__}: {e}") from e
-    
-    return str(vid_path)
+        raise RuntimeError(f"Pipeline 3 failed calling fal.ai model {VIDEO_MODEL}: {type(e).__name__}: {e}") from e
+
+    video_source = normalize_video_output(result)
+    if not video_source:
+        raise RuntimeError(f"Pipeline 3 failed: fal.ai returned no usable video source for model {VIDEO_MODEL}.")
+
+    return video_source
 
 # =========================================================
 # 4) Main Streamlit Application
@@ -821,7 +881,9 @@ def main():
         else:
             st.info(f"No image found for {selected_product.name}")
 
-        if PIPELINE1_BACKEND == "transformers_pipeline":
+        if not PIPELINE1_INITIALIZED:
+            st.info("Pipeline 1 model is lazy-loaded and will initialize only after you click Generate Assets.")
+        elif PIPELINE1_BACKEND == "transformers_pipeline":
             st.info("Pipeline 1 is running with transformers text-generation.")
             if PIPELINE1_LOAD_ERROR:
                 st.caption(f"Root cause: {PIPELINE1_LOAD_ERROR}")
@@ -898,7 +960,7 @@ def main():
             st.error(str(e))
             st.stop()
         
-        if vid_path and Path(vid_path).exists():
+        if _is_video_source_playable(vid_path):
             st.video(vid_path)
             prog.progress(100, "All pipelines completed!")
             st.success("Video generated successfully with slogan embedded at the end!")

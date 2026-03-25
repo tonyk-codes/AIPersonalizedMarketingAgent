@@ -1,11 +1,11 @@
 streamlit
 fal-client
 huggingface_hub
-transformers
-torch
-torchvision
-accelerate
-bitsandbytes
+transformers>=4.51.0
+torch>=2.2.0
+torchvision>=0.17.0
+accelerate>=0.34.0
+bitsandbytes>=0.43.0
 Pillow
 moviepy
 python-dotenv

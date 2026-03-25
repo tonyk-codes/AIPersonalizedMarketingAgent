@@ -153,13 +153,13 @@ def load_slogan_model():
         }
 
     try:
-        # Pipeline 1 is text-only, so use a text-generation pipeline.
+        # Follow the official HF recipe exactly and use only this model id.
         pipe = pipeline(
-            "text-generation",
-            model=local_model_dir,
-            tokenizer=local_model_dir,
+            "image-text-to-text",
+            model=SLOGAN_MODEL,
             trust_remote_code=True,
-            local_files_only=True,
+            cache_dir=str(HF_MODEL_CACHE_DIR),
+            token=HF_TOKEN or None,
         )
         return {
             "pipe": pipe,
@@ -174,7 +174,7 @@ def load_slogan_model():
             "processor": None,
             "model": None,
             "backend": "",
-            "load_error": f"Failed to load Pipeline 1 model {SLOGAN_MODEL} from local cache '{local_model_dir}': {type(e).__name__}: {e}",
+            "load_error": f"Failed to load Pipeline 1 model {SLOGAN_MODEL} from cache dir '{HF_MODEL_CACHE_DIR}' (snapshot: '{local_model_dir}'): {type(e).__name__}: {e}",
         }
 
 
@@ -515,17 +515,14 @@ def _run_pipeline1_text(messages: list[dict], max_new_tokens: int) -> str:
         return ""
 
     try:
-        prompt = _messages_to_plain_prompt(messages)
-        if not prompt:
+        formatted_messages = _format_messages_for_image_text_to_text(messages)
+        if not formatted_messages:
             _set_pipeline1_error("Pipeline 1 prompt is empty.")
             return ""
 
         out = pipeline1_pipe(
-            prompt,
+            text=formatted_messages,
             max_new_tokens=max_new_tokens,
-            return_full_text=False,
-            do_sample=True,
-            temperature=0.7,
         )
         text = _extract_text_from_text_generation_output(out)
 

@@ -201,17 +201,19 @@ def generate_slogan_and_description(
     image = data_uri(product_image_path)
 
     slogan_prompt = f"""
-Create exactly one ad slogan for a {customer.age}-year-old {customer.gender} customer from {customer.nationality}.
-Use the product image and the shoe type ({product.shoe_type}) to guide tone and wording.
+Write one catchy, natural-sounding ad slogan for a {customer.age}-year-old {customer.gender} from {customer.nationality} buying {product.shoe_type} shoes.
+
 Rules:
-- Excluding the customer name, use at most 10 words.
-- Put the customer name at the very end.
-- No full stop.
-- Do not use the word Nike.
-- Do not mention the product model name.
-- Make the tone suitable for the customer's age and gender.
-- Output only the slogan.
-Customer name: {customer.name}
+1. Use proper English, standard word spacing, and natural grammar.
+2. Keep the slogan to 10 words or fewer (excluding the name).
+3. The slogan must end with a comma, followed by a space, followed by the customer's name.
+4. Do not include a period (full stop) at the very end.
+5. Do not use the word "Nike" or the specific product model name.
+6. Match the tone and style to the customer's demographics.
+7. Output ONLY the exact slogan text. No quotes, no intro, no extra text.
+
+Example format: Step into your everyday comfort, {customer.name}
+
 Ad duration: {video_duration} seconds
 Avoid: {negative_prompt}
 """.strip()
@@ -222,7 +224,7 @@ Avoid: {negative_prompt}
     slogan = clean_slogan(hf_chat_stream(SLOGAN_MODEL, slogan_messages, 80, base_url=SLOGAN_ENDPOINT), customer.name)
 
     description_prompt = f"""
-Write exactly 2 vivid marketing sentences for a {product.shoe_type}.
+Write 2 vivid marketing sentences for a {product.shoe_type}.
 Use the product image plus the shoe type to describe performance, design, and fit for the target customer.
 Requirements:
 - Include the customer's age ({customer.age}), gender ({customer.gender}), and nationality ({customer.nationality}).
@@ -230,6 +232,7 @@ Requirements:
 - Do not mention the product model name.
 - Make the copy suitable for a {video_duration}-second cinematic ad.
 - Output only the 2-sentence description.
+- In English only.
 Avoid: {negative_prompt}
 """.strip()
 
@@ -319,7 +322,7 @@ def generate_video(product_image_path: str | None, cinematic_script: str, slogan
         "Use the provided product image as the visual reference.\n"
         "Follow this script closely and keep the shoe prominent.\n"
         f"{cinematic_script}\n"
-        f"At the end of the video, show this exact on-screen text: {slogan}\n"
+        f'End the video with the exact on-screen slogan "{slogan}", presented elegantly in a stylish, cinematic composition.\n'
         f"Target duration: {video_duration} seconds."
     )
 
@@ -426,7 +429,7 @@ def main() -> None:
 
         if playable(video):
             st.video(video)
-            st.success("Video generated successfully with the slogan shown on screen at the end.")
+            st.success("Video generated successfully")
         else:
             st.error("Video generation finished, but the returned source is not playable.")
     except Exception as e:

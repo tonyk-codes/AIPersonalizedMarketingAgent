@@ -10,8 +10,9 @@ from dotenv import load_dotenv
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
-from transformers import pipeline
+from transformers import pipeline, BitsAndBytesConfig
 from huggingface_hub import InferenceClient
+import torch
 
 # =========================================================
 # 1) Configuration & Setup
@@ -133,11 +134,24 @@ def _set_pipeline1_initialized(initialized: bool):
 @st.cache_resource(show_spinner=False)
 def load_slogan_model():
     try:
+        # Proper config for loading a large 4-bit model safely into memory.
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+        )
+
         # Follow the requested high-level transformers usage exactly.
         pipe = pipeline(
             "image-text-to-text", 
             model=SLOGAN_MODEL, 
-            trust_remote_code=True
+            trust_remote_code=True,
+            model_kwargs={
+                "quantization_config": quantization_config,
+                "torch_dtype": torch.float16,
+                "low_cpu_mem_usage": True,
+            },
+            device_map="auto" # Required to map 4-bit shards to GPU automatically
         )
         return {
             "pipe": pipe,

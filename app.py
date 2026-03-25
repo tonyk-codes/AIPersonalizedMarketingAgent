@@ -18,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 ICON_PATH = ASSETS_DIR / "icon" / "nike_icon.png"
 
-SLOGAN_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct:hyperbolic"
+SLOGAN_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 SLOGAN_ENDPOINT = None
 SCRIPT_MODEL = "zai-org/GLM-4.7-Flash:novita"
 VIDEO_MODEL = "fal-ai/ltx-2.3/image-to-video/fast"

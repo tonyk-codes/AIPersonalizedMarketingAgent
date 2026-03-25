@@ -116,15 +116,15 @@ def get_product_image(product: Product) -> str | None:
 
 def extract_text(chunk_content) -> str:
     if isinstance(chunk_content, str):
-        return chunk_content.strip()
+        return chunk_content
     if isinstance(chunk_content, list):
         bits = []
         for item in chunk_content:
             if isinstance(item, dict):
                 text = item.get("text") or item.get("content")
-                if isinstance(text, str) and text.strip():
-                    bits.append(text.strip())
-        return "\n".join(bits).strip()
+                if isinstance(text, str):
+                    bits.append(text)
+        return "".join(bits)
     return ""
 
 

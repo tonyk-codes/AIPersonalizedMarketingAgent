@@ -82,8 +82,8 @@ if not FAL_KEY:
 if FAL_KEY:
     os.environ["FAL_KEY"] = FAL_KEY
 
-SLOGAN_MODEL = "Qwen/Qwen3.5-0.8B"
-SCRIPT_MODEL = "zai-org/GLM-4.7-Flash:novita"
+SLOGAN_MODEL = "Qwen/Qwen2.5-VL-72B-Instruct"
+SCRIPT_MODEL = "mistralai/Mixtral-8x7B-Instruct-v0.1"
 VIDEO_MODEL = "fal-ai/ltx-2.3/image-to-video/fast"
 
 PIPELINE1_LOAD_ERROR = ""
@@ -127,51 +127,10 @@ def _set_pipeline1_initialized(initialized: bool):
     global PIPELINE1_INITIALIZED
     PIPELINE1_INITIALIZED = initialized
 
-@st.cache_resource(show_spinner=False)
-def load_slogan_model():
-    try:
-        pipe = pipeline("image-text-to-text", model=SLOGAN_MODEL)
-        return {
-            "pipe": pipe,
-            "processor": None,
-            "model": SLOGAN_MODEL,
-            "backend": "transformers_pipeline",
-            "load_error": "",
-        }
-    except Exception as e:
-        err_msg = "".join(traceback.format_exception_only(type(e), e)).strip()
-        return {
-            "pipe": None,
-            "processor": None,
-            "model": None,
-            "backend": "",
-            "load_error": f"Failed to load Pipeline 1 model {SLOGAN_MODEL}: {err_msg}",
-        }
+# No longer caching local models as we are using inference API
+# def load_slogan_model() and _ensure_pipeline1_loaded() removed below since we delegate directly
+PIPELINE1_INITIALIZED = True
 
-
-def _ensure_pipeline1_loaded():
-    global pipeline1_pipe, pipeline1_processor, pipeline1_model
-    if PIPELINE1_INITIALIZED:
-        return
-
-    pipeline1_bundle = load_slogan_model()
-    if not isinstance(pipeline1_bundle, dict):
-        pipeline1_bundle = {
-            "pipe": None,
-            "processor": None,
-            "model": None,
-            "backend": "",
-            "load_error": "Failed to initialize Pipeline 1: loader returned malformed state.",
-        }
-
-    pipeline1_pipe = pipeline1_bundle.get("pipe")
-    pipeline1_processor = pipeline1_bundle.get("processor")
-    pipeline1_model = pipeline1_bundle.get("model")
-    _set_pipeline1_backend(pipeline1_bundle.get("backend", ""))
-    _set_pipeline1_load_error(pipeline1_bundle.get("load_error", ""))
-    _set_pipeline1_initialized(True)
-
-# Configure the Streamlit page layout and title with Nike icon
 try:
     icon_path = ICON_DIR / "nike_icon.png"
     if icon_path.exists():
@@ -431,13 +390,10 @@ def _extract_text_from_text_generation_output(output) -> str:
 def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str) -> str:
     """Run text generation using Hugging Face InferenceClient chat API in stream mode."""
     if not HF_TOKEN:
-        _set_pipeline1_api_error("HF_TOKEN is not set.")
         print("HF_TOKEN is not set. Inference will fail.")
         return ""
 
     normalized_messages = _normalize_messages_for_chat_api(messages)
-    _set_pipeline1_api_error("")
-    _set_pipeline1_error("")
 
     # Single path: InferenceClient streaming chat completions.
     try:
@@ -469,53 +425,17 @@ def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str
         text = "".join(chunks).strip()
         if text:
             return text
-        _set_pipeline1_api_error(f"InferenceClient chat returned no usable text for model {model}.")
-        _set_pipeline1_error(f"InferenceClient chat returned no usable text for model {model}.")
+        print(f"InferenceClient chat returned no usable text for model {model}.")
         return ""
     except Exception as e:
         err = f"InferenceClient chat failed for model {model}: {type(e).__name__}: {e}"
-        _set_pipeline1_api_error(err)
-        _set_pipeline1_error(err)
         print(err)
-        return ""
+        # Re-raise to let the caller handle and display it if necessary
+        raise RuntimeError(err)
 
 def _run_pipeline1_text(messages: list[dict], max_new_tokens: int) -> str:
-    """Run Pipeline 1 model with transformers image-text-to-text pipeline."""
-    _ensure_pipeline1_loaded()
-
-    if PIPELINE1_BACKEND != "transformers_pipeline" or pipeline1_pipe is None:
-        _set_pipeline1_error(PIPELINE1_LOAD_ERROR or "Pipeline 1 backend is not loaded.")
-        print(PIPELINE1_LAST_ERROR)
-        return ""
-
-    try:
-        formatted_messages = _format_messages_for_image_text_to_text(messages)
-        if not formatted_messages:
-            _set_pipeline1_error("Pipeline 1 prompt is empty.")
-            return ""
-
-        out = pipeline1_pipe(
-            text=formatted_messages,
-            max_new_tokens=max_new_tokens,
-        )
-        text = _extract_text_from_text_generation_output(out)
-
-        if text:
-            _set_pipeline1_model_used(SLOGAN_MODEL)
-            _set_pipeline1_error("")
-            _set_pipeline1_api_error("")
-            return text
-
-        _set_pipeline1_error(
-            f"Transformers pipeline returned empty output for Pipeline 1 using {SLOGAN_MODEL}."
-        )
-        return ""
-    except Exception as e:
-        err = f"Pipeline 1 generation error: {type(e).__name__}: {e}"
-        _set_pipeline1_error(err)
-        print(err)
-        print(traceback.format_exc())
-        return ""
+    """Run Pipeline 1 model with Inference API (no transformers needed locally)."""
+    return _run_pipeline_text_api(messages, max_new_tokens, SLOGAN_MODEL)
 
 
 def _run_pipeline2_text(messages: list[dict], max_new_tokens: int) -> str:
@@ -556,10 +476,16 @@ def generate_slogan_and_description(
     slogan = ""
     try:
         slogan_content = []
-        if product_image_path:
-            # Qwen2.5-VL pipeline can load from a valid local path or URL
-            slogan_content.append({"type": "image", "url": product_image_path})
         slogan_content.append({"type": "text", "text": slogan_prompt})
+        if product_image_path:
+            # When deploying behind proxy/API, it usually requires a URL or base64 data uri.
+            # Local assets fallback for public models require base64.
+            import base64
+            with open(product_image_path, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+                # Add base64 data prefix (assuming png since assets are .png)
+                b64_url = f"data:image/png;base64,{encoded_string}"
+            slogan_content.append({"type": "image_url", "image_url": {"url": b64_url}})
         
         messages = [{"role": "user", "content": slogan_content}]
         res = _run_pipeline1_text(messages, max_new_tokens=50)
@@ -585,10 +511,15 @@ def generate_slogan_and_description(
     description = ""
     try:
         desc_content = []
-        if product_image_path:
-            desc_content.append({"type": "image", "url": product_image_path})
         desc_content.append({"type": "text", "text": description_prompt})
-        
+        if product_image_path:
+            # Re-read and attach base64 representation of the product image for remote vision api
+            import base64
+            with open(product_image_path, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+                b64_url = f"data:image/png;base64,{encoded_string}"
+            desc_content.append({"type": "image_url", "image_url": {"url": b64_url}})
+            
         messages = [{"role": "user", "content": desc_content}]
         res = _run_pipeline1_text(messages, max_new_tokens=100)
         if res:
@@ -666,6 +597,7 @@ Negative constraints: {negative_prompt}
 Generate the cinematic script now."""
 
     script = ""
+    last_err = ""
     try:
         messages = [
             {"role": "system", "content": [{"type": "text", "text": system_prompt}]},
@@ -675,10 +607,11 @@ Generate the cinematic script now."""
         if res:
             script = res
     except Exception as e:
+        last_err = str(e)
         print(f"Cinematic script generation error: {e}")
 
     if not script:
-        raise RuntimeError(f"Pipeline 2 failed to generate cinematic script using model {SCRIPT_MODEL}.")
+        raise RuntimeError(f"Pipeline 2 failed to generate cinematic script using model {SCRIPT_MODEL}. Error: {last_err}")
 
     return script
 
@@ -849,10 +782,6 @@ def main():
     st.markdown("## AI Smart Marketing: Personalized Nike Video Advertisements\n"
                 "This app generates personalized Nike campaign toolsets utilizing multi-modal GenAI.")
 
-    if not PIPELINE1_INITIALIZED:
-        with st.spinner("Initializing Pipeline 1 model (first run downloads and caches it)..."):
-            _ensure_pipeline1_loaded()
-
     # 2. Sidebar Configuration inputs matching the app
     with st.sidebar:
         st.header("Customer Profile")
@@ -890,19 +819,8 @@ def main():
         else:
             st.info(f"No image found for {selected_product.name}")
 
-        if not PIPELINE1_INITIALIZED:
-            st.info("Pipeline 1 model has not initialized yet.")
-        elif PIPELINE1_BACKEND == "transformers_pipeline":
-            st.info("Pipeline 1 is running with transformers text-generation from local cache.")
-            if PIPELINE1_LOAD_ERROR:
-                st.caption(f"Root cause: {PIPELINE1_LOAD_ERROR}")
-        elif not pipeline1_pipe and not (pipeline1_model and pipeline1_processor):
-            st.error("Pipeline 1 model is not loaded.")
-            if PIPELINE1_LOAD_ERROR:
-                st.caption(f"Root cause: {PIPELINE1_LOAD_ERROR}")
-        elif PIPELINE1_LAST_ERROR:
-            st.warning("Pipeline 1 has a recent runtime issue.")
-            st.caption(f"Root cause: {PIPELINE1_LAST_ERROR}")
+        if not st.secrets.get("HF_TOKEN") and not os.environ.get("HF_TOKEN"):
+            st.warning("HF_TOKEN is missing! Inference will likely fail.")
             
         generate_btn = st.button("Generate Assets", type="primary", use_container_width=True)
 

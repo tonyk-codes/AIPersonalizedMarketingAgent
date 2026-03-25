@@ -11,7 +11,7 @@ from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
 from transformers import pipeline
-from huggingface_hub import InferenceClient
+from huggingface_hub import InferenceClient, snapshot_download
 
 # =========================================================
 # 1) Configuration & Setup
@@ -23,11 +23,13 @@ BASE_DIR = Path(__file__).resolve().parent
 ARTIFACTS_DIR = BASE_DIR / "artifacts"
 VIDEOS_DIR = ARTIFACTS_DIR / "videos"
 IMAGES_DIR = ARTIFACTS_DIR / "images"
+TMP_DIR = ARTIFACTS_DIR / "tmp"
+HF_MODEL_CACHE_DIR = TMP_DIR / "hf-model-cache"
 ASSETS_DIR = BASE_DIR / "assets"
 ICON_DIR = ASSETS_DIR / "icon"
 
 # Ensure directories exist for saved media to prevent write errors
-for path in (VIDEOS_DIR, IMAGES_DIR):
+for path in (VIDEOS_DIR, IMAGES_DIR, TMP_DIR, HF_MODEL_CACHE_DIR):
     path.mkdir(parents=True, exist_ok=True)
 
 
@@ -130,12 +132,34 @@ def _set_pipeline1_initialized(initialized: bool):
 
 @st.cache_resource(show_spinner=False)
 def load_slogan_model():
+    local_model_dir = ""
+    download_kwargs = {
+        "repo_id": SLOGAN_MODEL,
+        "cache_dir": str(HF_MODEL_CACHE_DIR),
+    }
+    if HF_TOKEN:
+        download_kwargs["token"] = HF_TOKEN
+
     try:
-        # Follow the requested high-level transformers usage.
+        # Pre-download on first start so subsequent runs load from local cache.
+        local_model_dir = snapshot_download(**download_kwargs)
+    except Exception as e:
+        return {
+            "pipe": None,
+            "processor": None,
+            "model": None,
+            "backend": "",
+            "load_error": f"Failed to download/cache Pipeline 1 model {SLOGAN_MODEL}: {type(e).__name__}: {e}",
+        }
+
+    try:
+        # Pipeline 1 is text-only, so use a text-generation pipeline.
         pipe = pipeline(
-            "image-text-to-text",
-            model=SLOGAN_MODEL,
+            "text-generation",
+            model=local_model_dir,
+            tokenizer=local_model_dir,
             trust_remote_code=True,
+            local_files_only=True,
         )
         return {
             "pipe": pipe,
@@ -150,7 +174,7 @@ def load_slogan_model():
             "processor": None,
             "model": None,
             "backend": "",
-            "load_error": f"Failed to load Pipeline 1 model {SLOGAN_MODEL}: {type(e).__name__}: {e}",
+            "load_error": f"Failed to load Pipeline 1 model {SLOGAN_MODEL} from local cache '{local_model_dir}': {type(e).__name__}: {e}",
         }
 
 
@@ -160,9 +184,18 @@ def _ensure_pipeline1_loaded():
         return
 
     pipeline1_bundle = load_slogan_model()
-    pipeline1_pipe = pipeline1_bundle["pipe"]
-    pipeline1_processor = pipeline1_bundle["processor"]
-    pipeline1_model = pipeline1_bundle["model"]
+    if not isinstance(pipeline1_bundle, dict):
+        pipeline1_bundle = {
+            "pipe": None,
+            "processor": None,
+            "model": None,
+            "backend": "",
+            "load_error": "Failed to initialize Pipeline 1: loader returned malformed state.",
+        }
+
+    pipeline1_pipe = pipeline1_bundle.get("pipe")
+    pipeline1_processor = pipeline1_bundle.get("processor")
+    pipeline1_model = pipeline1_bundle.get("model")
     _set_pipeline1_backend(pipeline1_bundle.get("backend", ""))
     _set_pipeline1_load_error(pipeline1_bundle.get("load_error", ""))
     _set_pipeline1_initialized(True)
@@ -482,9 +515,18 @@ def _run_pipeline1_text(messages: list[dict], max_new_tokens: int) -> str:
         return ""
 
     try:
-        # Format messages for image-text-to-text pipeline (expects content as list with type/text structure)
-        formatted_messages = _format_messages_for_image_text_to_text(messages)
-        out = pipeline1_pipe(text=formatted_messages, max_new_tokens=max_new_tokens)
+        prompt = _messages_to_plain_prompt(messages)
+        if not prompt:
+            _set_pipeline1_error("Pipeline 1 prompt is empty.")
+            return ""
+
+        out = pipeline1_pipe(
+            prompt,
+            max_new_tokens=max_new_tokens,
+            return_full_text=False,
+            do_sample=True,
+            temperature=0.7,
+        )
         text = _extract_text_from_text_generation_output(out)
 
         if text:
@@ -825,6 +867,10 @@ def main():
     st.markdown("## AI Smart Marketing: Personalized Nike Video Advertisements\n"
                 "This app generates personalized Nike campaign toolsets utilizing multi-modal GenAI.")
 
+    if not PIPELINE1_INITIALIZED:
+        with st.spinner("Initializing Pipeline 1 model (first run downloads and caches it)..."):
+            _ensure_pipeline1_loaded()
+
     # 2. Sidebar Configuration inputs matching the app
     with st.sidebar:
         st.header("Customer Profile")
@@ -863,9 +909,9 @@ def main():
             st.info(f"No image found for {selected_product.name}")
 
         if not PIPELINE1_INITIALIZED:
-            st.info("Pipeline 1 model is lazy-loaded and will initialize only after you click Generate Assets.")
+            st.info("Pipeline 1 model has not initialized yet.")
         elif PIPELINE1_BACKEND == "transformers_pipeline":
-            st.info("Pipeline 1 is running with transformers text-generation.")
+            st.info("Pipeline 1 is running with transformers text-generation from local cache.")
             if PIPELINE1_LOAD_ERROR:
                 st.caption(f"Root cause: {PIPELINE1_LOAD_ERROR}")
         elif not pipeline1_pipe and not (pipeline1_model and pipeline1_processor):

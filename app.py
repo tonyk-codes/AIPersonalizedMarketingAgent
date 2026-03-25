@@ -82,7 +82,7 @@ if not FAL_KEY:
 if FAL_KEY:
     os.environ["FAL_KEY"] = FAL_KEY
 
-SLOGAN_MODEL = "erichflam-hkust/Qwen2.5-VL-7B-Instruct-bnb-4bit-NIKE-Finetuned"
+SLOGAN_MODEL = "Qwen/Qwen3.5-0.8B"
 SCRIPT_MODEL = "zai-org/GLM-4.7-Flash:novita"
 VIDEO_MODEL = "fal-ai/ltx-2.3/image-to-video/fast"
 
@@ -130,26 +130,7 @@ def _set_pipeline1_initialized(initialized: bool):
 @st.cache_resource(show_spinner=False)
 def load_slogan_model():
     try:
-        # Proper config for loading a large 4-bit model safely.
-        # This allows you to run it via the transformers pipeline library.
-        # Ensure your environment has bitsandbytes, accelerate, and peft installed.
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_quant_type="nf4",
-        )
-
-        pipe = pipeline(
-            "image-text-to-text", 
-            model=SLOGAN_MODEL, 
-            trust_remote_code=True,
-            model_kwargs={
-                "quantization_config": quantization_config,
-                "torch_dtype": torch.float16,
-                "low_cpu_mem_usage": True,
-            },
-            device_map="auto" # Mapped automatically
-        )
+        pipe = pipeline("image-text-to-text", model=SLOGAN_MODEL)
         return {
             "pipe": pipe,
             "processor": None,

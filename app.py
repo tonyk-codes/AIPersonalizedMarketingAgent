@@ -140,21 +140,11 @@ def load_slogan_model(token: str):
         }
 
     try:
-        # Use plain `device` routing to avoid requiring Accelerate for `device_map="auto"`.
-        pipeline_device = -1
-        try:
-            import torch
-            if torch.cuda.is_available():
-                pipeline_device = 0
-        except Exception:
-            pipeline_device = -1
-
+        # Follow the requested high-level transformers usage.
         pipe = pipeline(
             "image-text-to-text",
             model=SLOGAN_MODEL,
-            token=token,
             trust_remote_code=True,
-            device=pipeline_device,
         )
         return {
             "pipe": pipe,
@@ -503,7 +493,7 @@ def _run_pipeline1_text(messages: list[dict], max_new_tokens: int) -> str:
     try:
         # Format messages for image-text-to-text pipeline (expects content as list with type/text structure)
         formatted_messages = _format_messages_for_image_text_to_text(messages)
-        out = pipeline1_pipe(text=formatted_messages)
+        out = pipeline1_pipe(text=formatted_messages, max_new_tokens=max_new_tokens)
         text = _extract_text_from_text_generation_output(out)
 
         if text:

@@ -446,7 +446,26 @@ def _run_pipeline1_text(messages: list[dict], max_new_tokens: int) -> str:
 
 def _run_pipeline2_text(messages: list[dict], max_new_tokens: int) -> str:
     """Run Pipeline 2 model using Inference API."""
-    return _run_pipeline_text_api(messages, max_new_tokens, SCRIPT_MODEL)
+    if not HF_TOKEN:
+        print("HF_TOKEN is not set. Inference will fail.")
+        return ""
+        
+    normalized_messages = _normalize_messages_for_chat_api(messages)
+    
+    try:
+        client = InferenceClient(api_key=HF_TOKEN)
+        completion = client.chat.completions.create(
+            model=SCRIPT_MODEL,
+            messages=normalized_messages,
+            max_tokens=max_new_tokens,
+        )
+        # Use content from the first choice payload
+        content = completion.choices[0].message.content
+        return _extract_text_from_chat_content(content) if content else ""
+    except Exception as e:
+        err = f"Pipeline 2 text generation failed for model {SCRIPT_MODEL}: {type(e).__name__}: {e}"
+        print(err)
+        raise RuntimeError(err)
 
 def generate_slogan_and_description(
     customer: Customer,

@@ -253,15 +253,10 @@ def _normalize_messages_for_chat_api(messages: list[dict]) -> list[dict]:
                     text_value = str(part.get("text", "")).strip()
                     if text_value:
                         parts.append({"type": "text", "text": text_value})
-                elif part.get("type") in ("image", "image_url"):
-                    url_val = part.get("url", "")
-                    if part.get("type") == "image_url" and isinstance(part.get("image_url"), dict):
-                        url_val = part["image_url"].get("url", url_val)
-                    
-                    image_url_str = str(url_val).strip()
-                    
-                    if image_url_str.startswith("http://") or image_url_str.startswith("https://") or image_url_str.startswith("data:image/"):
-                        parts.append({"type": "image_url", "image_url": {"url": image_url_str}})
+                elif part.get("type") == "image":
+                    image_url = str(part.get("url", "")).strip()
+                    if image_url.startswith("http://") or image_url.startswith("https://"):
+                        parts.append({"type": "image_url", "image_url": {"url": image_url}})
                     else:
                         # Local file URIs/paths cannot be fetched by remote API compute.
                         parts.append({"type": "text", "text": "[local image omitted for remote inference]"})
@@ -392,7 +387,7 @@ def _extract_text_from_text_generation_output(output) -> str:
     return ""
 
 
-def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str, base_url: str | None = None) -> str:
+def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str, base_url: str = None) -> str:
     """Run text generation using Hugging Face InferenceClient chat API in stream mode."""
     if not HF_TOKEN:
         print("HF_TOKEN is not set. Inference will fail.")
@@ -402,7 +397,11 @@ def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str
 
     # Single path: InferenceClient streaming chat completions.
     try:
-        client = InferenceClient(api_key=HF_TOKEN, base_url=base_url)
+        kwargs = {"api_key": HF_TOKEN}
+        if base_url:
+            kwargs["base_url"] = base_url
+            
+        client = InferenceClient(**kwargs)
         stream = client.chat.completions.create(
             model=model,
             messages=normalized_messages,
@@ -533,17 +532,13 @@ def generate_slogan_and_description(
     """
     # Slogan generation (image + text for Pipeline 1)
     slogan_prompt = (
-        f"You are an expert copywriter. Write a highly engaging consumer slogan for a {product.shoe_type}. "
-        f"Target audience: {customer.age}-year-old {customer.gender} from {customer.nationality}. "
-        f"The slogan must resonate with this specific demographic and fit a {video_duration}-second high-energy video ad concept. "
-        f"Avoid: {negative_prompt}. "
-        "Rules:\n"
-        "1. MUST be maximum 10 words (excluding the customer name).\n"
-        "2. DO NOT include the word 'Nike'.\n"
-        "3. DO NOT include any product or model name.\n"
-        "4. DO NOT put a full stop (.) or comma (,) at the very end of the final slogan.\n"
-        f"5. The final output MUST end immediately with the exact name '{customer.name}'.\n"
-        f"Format example: Unleash your urban energy inside the city {customer.name}"
+        f"Write a short, engaging Nike slogan (max 10 words) for a {customer.age}yo {customer.nationality} {customer.gender} "
+        f"named {customer.name} buying a {product.shoe_type}. "
+        f"The slogan should fit a {video_duration}-second high-energy ad concept. "
+        f"Avoid concepts related to: {negative_prompt}. "
+        f"Make it motivational and empowering. "
+        f"Do not mention any product name in the slogan. "
+        f"End the slogan with a comma and the customer's name exactly, like '..., {customer.name}'."
     )
     slogan = ""
     try:
@@ -574,14 +569,11 @@ def generate_slogan_and_description(
 
     # Product description generation (image + text for Pipeline 1)
     description_prompt = (
-        f"You are a professional fashion and sneaker copywriter. Look at the attached image of this {product.shoe_type}. "
-        f"Write a compelling 2-sentence description of the visual design and performance vibe of this {product.shoe_type}. "
-        f"Tailor the tone heavily towards a {customer.age}-year-old {customer.nationality} {customer.gender}. "
-        f"Avoid: {negative_prompt}. "
-        "Rules:\n"
-        "1. Focus entirely on the aesthetic details and vibe you see in the image.\n"
-        "2. DO NOT mention the exact product name, model number, or customer name.\n"
-        "3. Make it vivid, highly visual, and suitable to inspire an advertising script.\n"
+        f"Write a compelling 2-sentence product description for {product.name} ({product.shoe_type}) "
+        f"targeting a {customer.age}yo {customer.nationality} {customer.gender}. "
+        f"Focus on performance and design. "
+        f"The copy should match a {video_duration}-second cinematic ad and avoid: {negative_prompt}. "
+        f"Be vivid and marketing-focused."
     )
     description = ""
     try:
@@ -631,11 +623,11 @@ def generate_cinematic_script(
     Returns:
         Detailed cinematic script for video generation
     """
-    system_prompt = f"""You are a world-class cinematic prompt engineer and advertising creative director.
+    system_prompt = f"""You are a world-class cinematic prompt engineer and Nike advertising creative director.
 
-Your job is to generate ONE single, highly detailed, ready-to-use text prompt for a high-end image-to-video AI model. The video will be generated directly from the user's base product image perfectly matching your description.
+Your job is to generate ONE single, extremely detailed, ready-to-use text prompt for high-end image-text-to-video model.
 
-CRITICAL: You MUST follow this exact layered structure and style (never deviate, do NOT add extra conversational text):
+CRITICAL: You MUST follow this exact layered structure and style (never deviate):
 
 [Subject / Hero Shot]:
 [Scene & Environment]:
@@ -645,22 +637,31 @@ CRITICAL: You MUST follow this exact layered structure and style (never deviate,
 [Personalization Layer]:
 [Style & Quality Boosters]:
 
-Use highly vivid, professional advertising language with cinematic terms (e.g., tracking pan, dolly zoom, orbiting crane shot, low-angle reveal, anamorphic lenses, 60fps slow-motion bursts, volumetric god rays).
+Use highly vivid, professional advertising language with cinematic terms (tracking pan, dolly zoom, orbiting crane shot, low-angle side-to-front reveal, anamorphic lenses, ARRI Alexa 65, 60fps slow-motion bursts, volumetric god rays, lens flares, etc.).
 
 Essential requirements:
+- Emphasize visible Swoosh branding on clothing and billboards
 - High-energy athletic motion and dynamic action
-- Futuristic neon city aesthetics with golden hour lighting
-- Empowering atmosphere tailored exactly to the customer profile
-- Ensure the {product.shoe_type} is clearly the hero of the entire {video_duration}-second clip
+- Futuristic neon city aesthetics with golden hour sunset lighting
+- Motivational and empowering atmosphere tailored to the customer profile
+- {product.shoe_type} in prominent focus throughout the video
+- Video duration: {video_duration} seconds
 - Avoid: {negative_prompt}
 
-Personalization Context: Tailor the energy, aesthetic, cultural resonance, and tone specifically for a {customer.age}-year-old {customer.nationality} {customer.gender}. Make it feel empowering and perfectly matched to them.
+Personalization is CRITICAL: Tailor the energy, tone, appeal, and cultural resonance specifically for a {customer.age}-year-old {customer.gender} named {customer.name} from {customer.nationality}. Make it feel empowering and perfectly matched to this demographic.
 
 Product context: {product.name} ({product.shoe_type}) - {product_description}
 
-Output ONLY the final prompt text! No explanations, no JSON, no markdown code blocks, no intro greetings. Begin exactly with '[Subject / Hero Shot]:'."""
+Output ONLY the final prompt text — nothing else. No explanations, no JSON, no markdown, no extra words. Start directly with "[Subject / Hero Shot]:"."""
 
-    user_message = f"""Generate the full cinematic script now for this {product.shoe_type}. Make it rich, action-packed, and perfectly structured."""
+    user_message = f"""Analyze this Nike product and {product.shoe_type} type, then create the perfect cinematic video prompt.
+Product: {product.name}
+Type: {product.shoe_type}
+Description: {product_description}
+Target: {customer.age}yo {customer.gender} from {customer.nationality}
+Negative constraints: {negative_prompt}
+
+Generate the cinematic script now."""
 
     script = ""
     last_err = ""
@@ -740,13 +741,13 @@ def generate_video(product_image_path: str | None, cinematic_script: str, slogan
         raise RuntimeError("Pipeline 3 failed: FAL_KEY is missing in Streamlit secrets.")
 
     try:
-        image_url = fal.upload_file(Path(product_image_path))
+        image_url = fal.upload_file(product_image_path)
     except Exception as e:
         raise RuntimeError(f"Pipeline 3 failed uploading image to fal.ai storage: {type(e).__name__}: {e}") from e
 
     video_prompt = (
         f"{cinematic_script}\n"
-        f"CRITICAL REQUIREMENT: Boldly overlay the following exact text on the screen prominently during the final beat/second of the video: '{slogan}'\n"
+        f"Integrate this closing brand line naturally in the final beat: {slogan}.\n"
         f"Target duration: {video_duration} seconds."
     )
 
@@ -857,10 +858,7 @@ def main():
         age = st.number_input("Age", 10, 90, 25)
         # Selectbox input provides rigid variables easing prompt structuring
         gender = st.selectbox("Gender", ["Male", "Female"])
-        nationality = st.selectbox("Nationality", [
-            "Chinese", "American", "Indian", "Indonesian", "Pakistani", 
-            "Nigerian", "Brazilian", "Bangladeshi", "Russian", "Mexican"
-        ])
+        nationality = st.selectbox("Nationality", ["USA", "Chinese"])
         
         st.header("Generation Config")
         
@@ -887,6 +885,11 @@ def main():
         if product_image:
             # Note: the `use_container_width` parameter was formerly known as `use_column_width` or just `width="stretch"` in older Streamlit. `use_container_width=True` is the proper way.
             st.image(product_image, use_container_width=True)
+        else:
+            st.info(f"No image found for {selected_product.name}")
+
+        if not st.secrets.get("HF_TOKEN") and not os.environ.get("HF_TOKEN"):
+            st.warning("HF_TOKEN is missing! Inference will likely fail.")
             
         generate_btn = st.button("Generate Assets", type="primary", use_container_width=True)
 
@@ -915,6 +918,9 @@ def main():
         prog.progress(25, "Pipeline 1: Slogan & Product Description generated!")
         st.write("**Pipeline 1 (Slogan & Product Description):**")
         st.caption(f"Model used: {SLOGAN_MODEL}")
+        if PIPELINE1_MODEL_USED:
+            st.caption(f"Pipeline 1 model runtime: {PIPELINE1_MODEL_USED}")
+        st.caption(f"Pipeline 1 backend: {PIPELINE1_BACKEND or 'unavailable'}")
         st.success(f"**Slogan:** {slogan}\n\n**Description:** {product_description}")
         
         # Phase 2: Generate cinematic script for video
@@ -953,7 +959,10 @@ def main():
         if _is_video_source_playable(vid_path):
             st.video(vid_path)
             prog.progress(100, "All pipelines completed!")
-            st.success("Video generated successfully")
+            st.success("Video generated successfully with slogan embedded at the end!")
+        else:
+            st.error("Failed to generate video. Please check the logs.")
+        prog.progress(100, "All pipelines completed!")
 
 if __name__ == "__main__":
     main()

@@ -11,7 +11,7 @@ from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
 from transformers import pipeline
-from huggingface_hub import InferenceClient, snapshot_download
+from huggingface_hub import InferenceClient
 
 # =========================================================
 # 1) Configuration & Setup
@@ -132,34 +132,12 @@ def _set_pipeline1_initialized(initialized: bool):
 
 @st.cache_resource(show_spinner=False)
 def load_slogan_model():
-    local_model_dir = ""
-    download_kwargs = {
-        "repo_id": SLOGAN_MODEL,
-        "cache_dir": str(HF_MODEL_CACHE_DIR),
-    }
-    if HF_TOKEN:
-        download_kwargs["token"] = HF_TOKEN
-
     try:
-        # Pre-download on first start so subsequent runs load from local cache.
-        local_model_dir = snapshot_download(**download_kwargs)
-    except Exception as e:
-        return {
-            "pipe": None,
-            "processor": None,
-            "model": None,
-            "backend": "",
-            "load_error": f"Failed to download/cache Pipeline 1 model {SLOGAN_MODEL}: {type(e).__name__}: {e}",
-        }
-
-    try:
-        # Follow the official HF recipe exactly and use only this model id.
+        # Follow the requested high-level transformers usage exactly.
         pipe = pipeline(
-            "image-text-to-text",
-            model=SLOGAN_MODEL,
-            trust_remote_code=True,
-            cache_dir=str(HF_MODEL_CACHE_DIR),
-            token=HF_TOKEN or None,
+            "image-text-to-text", 
+            model=SLOGAN_MODEL, 
+            trust_remote_code=True
         )
         return {
             "pipe": pipe,
@@ -169,12 +147,14 @@ def load_slogan_model():
             "load_error": "",
         }
     except Exception as e:
+        import traceback
+        err_msg = "".join(traceback.format_exception_only(type(e), e)).strip()
         return {
             "pipe": None,
             "processor": None,
             "model": None,
             "backend": "",
-            "load_error": f"Failed to load Pipeline 1 model {SLOGAN_MODEL} from cache dir '{HF_MODEL_CACHE_DIR}' (snapshot: '{local_model_dir}'): {type(e).__name__}: {e}",
+            "load_error": f"Failed to load Pipeline 1 model {SLOGAN_MODEL}: {err_msg}",
         }
 
 

@@ -455,6 +455,7 @@ def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str
 
     normalized_messages = _normalize_messages_for_chat_api(messages)
     _set_pipeline1_api_error("")
+    _set_pipeline1_error("")
 
     # Single path: InferenceClient streaming chat completions.
     try:
@@ -487,10 +488,12 @@ def _run_pipeline_text_api(messages: list[dict], max_new_tokens: int, model: str
         if text:
             return text
         _set_pipeline1_api_error(f"InferenceClient chat returned no usable text for model {model}.")
+        _set_pipeline1_error(f"InferenceClient chat returned no usable text for model {model}.")
         return ""
     except Exception as e:
         err = f"InferenceClient chat failed for model {model}: {type(e).__name__}: {e}"
         _set_pipeline1_api_error(err)
+        _set_pipeline1_error(err)
         print(err)
         return ""
 

@@ -82,8 +82,8 @@ if not FAL_KEY:
 if FAL_KEY:
     os.environ["FAL_KEY"] = FAL_KEY
 
-SLOGAN_MODEL = "Qwen/Qwen2.5-VL-72B-Instruct"
-SCRIPT_MODEL = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+SLOGAN_MODEL = "Qwen/Qwen3.5-9B:together"
+SCRIPT_MODEL = "zai-org/GLM-4.7-Flash:novita"
 VIDEO_MODEL = "fal-ai/ltx-2.3/image-to-video/fast"
 
 PIPELINE1_LOAD_ERROR = ""

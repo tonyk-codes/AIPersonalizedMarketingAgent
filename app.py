@@ -253,10 +253,15 @@ def _normalize_messages_for_chat_api(messages: list[dict]) -> list[dict]:
                     text_value = str(part.get("text", "")).strip()
                     if text_value:
                         parts.append({"type": "text", "text": text_value})
-                elif part.get("type") == "image":
-                    image_url = str(part.get("url", "")).strip()
-                    if image_url.startswith("http://") or image_url.startswith("https://"):
-                        parts.append({"type": "image_url", "image_url": {"url": image_url}})
+                elif part.get("type") in ("image", "image_url"):
+                    url_val = part.get("url", "")
+                    if part.get("type") == "image_url" and isinstance(part.get("image_url"), dict):
+                        url_val = part["image_url"].get("url", url_val)
+                    
+                    image_url_str = str(url_val).strip()
+                    
+                    if image_url_str.startswith("http://") or image_url_str.startswith("https://") or image_url_str.startswith("data:image/"):
+                        parts.append({"type": "image_url", "image_url": {"url": image_url_str}})
                     else:
                         # Local file URIs/paths cannot be fetched by remote API compute.
                         parts.append({"type": "text", "text": "[local image omitted for remote inference]"})

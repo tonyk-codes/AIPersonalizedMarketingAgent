@@ -446,6 +446,7 @@ def _run_pipeline1_text(messages: list[dict], max_new_tokens: int) -> str:
 
 def _run_pipeline2_text(messages: list[dict], max_new_tokens: int) -> str:
     """Run Pipeline 2 model using Inference API."""
+    import traceback
     if not HF_TOKEN:
         print("HF_TOKEN is not set. Inference will fail.")
         return ""
@@ -461,6 +462,7 @@ def _run_pipeline2_text(messages: list[dict], max_new_tokens: int) -> str:
         flat_messages.append({"role": role, "content": str(content)})
     
     try:
+        print(f"\n[Pipeline 2] Sending request to model: {SCRIPT_MODEL}")
         client = InferenceClient(api_key=HF_TOKEN)
         completion = client.chat.completions.create(
             model=SCRIPT_MODEL,
@@ -473,9 +475,18 @@ def _run_pipeline2_text(messages: list[dict], max_new_tokens: int) -> str:
             return content.strip()
         return _extract_text_from_chat_content(content) if content else ""
     except Exception as e:
-        err = f"Pipeline 2 text generation failed for model {SCRIPT_MODEL}: {type(e).__name__}: {e}"
-        print(err)
-        raise RuntimeError(err)
+        err_msg = (
+            f"\n{'='*60}\n"
+            f"❌ PIPELINE 2 FAILED ❌\n"
+            f"Model: {SCRIPT_MODEL}\n"
+            f"Error Type: {type(e).__name__}\n"
+            f"Error Details: {str(e)}\n\n"
+            f"Full Traceback:\n{traceback.format_exc()}\n"
+            f"Payload Sent: {flat_messages}\n"
+            f"{'='*60}\n"
+        )
+        print(err_msg)
+        raise RuntimeError(err_msg) from e
 
 def generate_slogan_and_description(
     customer: Customer,

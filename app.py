@@ -14,7 +14,7 @@ ICON_PATH = ASSETS_DIR / "icon" / "nike_icon.png"
 SLOGAN_MODEL = "erichflam-hkust/Qwen2.5-VL-7B-Instruct-NIKE-Finetuned"
 SLOGAN_ENDPOINT = "https://atm0kc5pzw8g9pck.us-east-1.aws.endpoints.huggingface.cloud"
 SCRIPT_MODEL = "zai-org/GLM-4.7-Flash:novita"
-VIDEO_MODEL = "fal-ai/sora-2/image-to-video"
+VIDEO_MODEL = "fal-ai/sora-2/image-to-video/pro"
 
 NATIONALITIES = ["Chinese", "American", "Indian", "Indonesian", "Pakistani", "Nigerian", "Brazilian", "Bangladeshi", "Russian", "Mexican"]
 NEGATIVE_DEFAULT = "blurry, low quality, artifacts, deformed, static, watermark, ugly, distorted, overexposed"
@@ -152,7 +152,7 @@ Core rules for {product.shoe_type}:
 - Focus on performance, innovation, attitude, and personal triumph.
 - Do NOT use the words "Nike", "Just do it", or specific model names.
 
-TASK: Write one short, natural-sounding ad sentence only (maximum 9 words total).
+TASK: Write one short, natural-sounding ad sentence only (maximum 5 words total, excluding customer name).
 - The text must end exactly with: , {customer.name} (with no period at the end).
 - Do NOT include labels like "Slogan:", "-", "—", "." or quotes.
 
@@ -291,7 +291,7 @@ def generate_video(product_image_path: str | None, cinematic_script: str, slogan
         f'End the video with the exact on-screen slogan "{slogan}", presented elegantly in a stylish, cinematic composition.\n'
     )
 
-    result = fal.subscribe(VIDEO_MODEL, arguments={"image_url": image_url, "prompt": prompt, "duration": 4, "resolution": "720p", "aspect_ratio": "16:9"}, with_logs=True)
+    result = fal.subscribe(VIDEO_MODEL, arguments={"image_url": image_url, "prompt": prompt, "duration": 4}, with_logs=True)
     video = normalize_video_output(result)
     if not video:
         raise RuntimeError(f"No usable video source returned by {VIDEO_MODEL}.")

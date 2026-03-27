@@ -170,10 +170,12 @@ Generate exactly ONE line that satisfies ALL of the following:
 - Maximum 5 words total BEFORE the comma (excluding the customer name).
 - The line must end exactly with: , {customer.name}
 - Do NOT add a period at the end.
+- Do NOT use any periods, ellipses, exclamation marks, question marks, colons, semicolons, or dashes anywhere in the line.
+- The only punctuation allowed in the entire line is the single comma immediately before the customer name.
 - Do NOT include labels like "Slogan:", "-", "—", "." or quotes.
 - Do NOT include any variables literally (use real words only in the generated text).
 - Bold, motivational, empowering, concise — focus on performance, innovation, attitude, and personal triumph.
-- Avoid these concepts: {negative_prompt}
+- There must be exactly one comma in the line, followed by a space and {customer.name}, with no other punctuation anywhere.
 
 2) Chant-worthy / pre-workout vibe:
 - The line should feel iconic, chant-worthy, and memorable — something {customer.name} could say to themselves before a run or workout.
@@ -278,11 +280,18 @@ Use this exact structure and no other text:
 
 Requirements:
 - The product image will be provided separately to the video model as the visual reference.
-- Keep the {product.shoe_type} in clear focus throughout.
-- Build a coherent ad, optimized for script-to-video generation.
-- Make camera direction precise and executable.
+- The ad must prominently feature a realistic human hero who plausibly resembles the customer based on the available customer profile.
+- The person should appear in the majority of the video, with clear face visibility in hero shots, medium shots, and selected close-ups, while the {product.shoe_type} remains visually important throughout.
+- Keep the {product.shoe_type} in clear focus throughout, especially during motion, contact, and landing shots.
+- Build a coherent premium sports ad optimized for script-to-video generation.
+- Make camera direction precise, cinematic, and executable.
 - Use vivid but concise cinematic language.
-- Tailor energy, styling, and motion to a {customer.age}-year-old {customer.gender} customer from {customer.nationality}, located in {customer.location}.
+- Tailor the hero’s age cues, gender presentation, facial features, hair, skin tone, body type, wardrobe styling, movement energy, and overall vibe to a plausible interpretation of a {customer.age}-year-old {customer.gender} customer from {customer.nationality}, located in {customer.location}.
+- Reflect location and cultural styling subtly through environment, wardrobe, grooming, rhythm, and mood without becoming stereotypical.
+- Prioritize customer resemblance over generic athletic-model styling.
+- If a customer portrait or face reference is available to the video model, explicitly instruct it to closely match that facial identity; if no portrait is available, create a believable non-celebrity lookalike based only on profile attributes and do not imply exact identity.
+- Ensure the hero interacts naturally with the product so the shoe feels worn, lived in, and aspirational.
+- Include at least one strong hero moment where both the customer-like face and the {product.shoe_type} are visible in the same shot.
 - The final section must show this exact on-screen slogan at the end of the video: {slogan}
 - Do not mention the product model name.
 - Avoid: {negative_prompt}
@@ -351,17 +360,17 @@ def app_style() -> None:
 def main() -> None:
     app_style()
     st.markdown(
-        "## AI Smart Marketing: Personalized Nike Video Advertisements\n"
-        "This app generates personalized Nike campaign assets with a 3-step GenAI pipeline."
+        "### AIPersonalized Marketing Nike Video Advertisement Generation\n"
+        "Generate tailored Nike campaign videos with a 3-step GenAI pipeline. Complete the customer profile and generation settings, then click “Generate Assets” to create your personalized ad creatives."
     )
 
     with st.sidebar:
         st.header("Customer Profile")
         name = st.text_input("Name", "Alex")
-        age = st.number_input("Age", 10, 90, 25)
+        age = st.number_input("Age", 18, 90, 25)
         gender = st.selectbox("Gender", ["Male", "Female"])
         nationality = st.selectbox("Nationality", NATIONALITIES, index=0)
-        location = st.selectbox("Location", ["Hong Kong", "Los Angeles"], index=0)
+        location = st.selectbox("Location", ["Hong Kong", "Los Angeles", "London"], index=0)
 
         st.header("Generation Config")
         negative_prompt = st.text_area("Negative Prompt for Video", NEGATIVE_DEFAULT, height=100)

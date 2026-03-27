@@ -226,18 +226,17 @@ Product Type: {product.shoe_type} (Describe the performance, design, and fit bas
 Copywriting & Style Rules
 Write in normal English with regular spaces between words. No numbered lists, hyphens, or dashes.
 
-Output EXACTLY TWO sentences total, forming a single short paragraph.
+Output EXACTLY TWO sentences total, forming a single short paragraph without the numbering.
 
 Tie product features directly to how they unlock {customer.name}'s potential in their specific life, city, age, and gender context. Highlight features → benefits → emotional payoff.
 
 Keep it bold, motivational, empowering, and concise. Be authentic and athlete-minded; avoid generic buzzwords or cheesy phrases.
 
 Strict Negative Constraints
-DO NOT use specific brand names (like Nike, Adidas) or product model names other than the provided {product.name}.
-
-DO NOT output any introductory text, explanations, or meta-commentary.
-
-DO NOT append any tone guidelines, instructions, or trailing text at the end of your response.
+- DO NOT use specific brand names (like Nike, Adidas) or product model names other than the provided {product.name}.
+- DO NOT output any introductory text, explanations, or meta-commentary.
+- DO NOT append any tone guidelines, instructions, or trailing text at the end of your response.
+- DO NOT end the description with "- Use at least one benefit of the product in your response." or " - . Use an empowering, energetic Nike tone."
 
 Example format:
 Designed for your relentless pace, {customer.name}, the {product.name} {product.shoe_type} offers unmatched breathability and a responsive midsole for those humid Miami runs. Whether you are sprinting through the city streets or pushing your limits, this sleek design ensures a locked-in fit that matches your unyielding strength.

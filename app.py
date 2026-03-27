@@ -236,7 +236,7 @@ Strict Negative Constraints
 - DO NOT use specific brand names (like Nike, Adidas) or product model names other than the provided {product.name}.
 - DO NOT output any introductory text, explanations, or meta-commentary.
 - DO NOT append any tone guidelines, instructions, or trailing text at the end of your response.
-- DO NOT end the description with "- Use at least one benefit of the product in your response." or " - . Use an empowering, energetic Nike tone."
+- DO NOT end the description with "- Use at least one benefit of the product in your response."
 
 Example format:
 Designed for your relentless pace, {customer.name}, the {product.name} {product.shoe_type} offers unmatched breathability and a responsive midsole for those humid Miami runs. Whether you are sprinting through the city streets or pushing your limits, this sleek design ensures a locked-in fit that matches your unyielding strength.
